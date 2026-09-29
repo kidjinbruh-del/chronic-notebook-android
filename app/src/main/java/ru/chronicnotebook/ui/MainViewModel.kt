@@ -205,10 +205,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deactivateMed(id: Long) {
         viewModelScope.launch {
+            cancelFutureIntakes(id)
             db.medDao().deactivate(id)
             IntakeScheduler(getApplication()).rescheduleAll()
             _message.value = "Препарат деактивирован"
         }
+    }
+
+    /** Снимает ещё не наступившие приёмы препарата и их будильники. */
+    private suspend fun cancelFutureIntakes(medId: Long) {
+        val app = getApplication<Application>()
+        val now = System.currentTimeMillis()
+        db.intakeDao().futurePendingIds(medId, now).forEach { AlarmScheduler.cancel(app, it) }
+        db.intakeDao().dropFuturePending(medId, now)
     }
 
     /** Текущие слоты приёма препарата для формы редактирования. */
@@ -230,7 +239,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         times: List<Int>,
     ) {
         viewModelScope.launch {
-            db.medDao().updateMed(id, name, "", dose, unit, withFood, prescribedBy, "")
+            cancelFutureIntakes(id)
+            db.medDao().updateMed(id, name, dose, unit, withFood, prescribedBy)
             val clean = times.distinct().sorted()
             if (clean.isEmpty()) {
                 _message.value = "Время приёма не задано: напоминания не будут приходить"

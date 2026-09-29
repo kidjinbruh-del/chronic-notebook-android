@@ -53,19 +53,19 @@ interface MedDao {
     @Query("UPDATE med SET active = 0 WHERE id = :id")
     suspend fun deactivate(id: Long)
 
+    // inn и sourceUrl форма не редактирует, поэтому не трогаем их здесь:
+    // иначе сохранение карточки затирало бы эти поля пустыми строками.
     @Query(
-        "UPDATE med SET name = :name, inn = :inn, dose = :dose, unit = :unit, " +
-            "withFood = :withFood, prescribedBy = :prescribedBy, sourceUrl = :sourceUrl WHERE id = :id"
+        "UPDATE med SET name = :name, dose = :dose, unit = :unit, " +
+            "withFood = :withFood, prescribedBy = :prescribedBy WHERE id = :id"
     )
     suspend fun updateMed(
         id: Long,
         name: String,
-        inn: String,
         dose: String,
         unit: String,
         withFood: Boolean,
         prescribedBy: String,
-        sourceUrl: String,
     )
 
     @Insert
@@ -107,6 +107,23 @@ interface IntakeDao {
 
     @Query("UPDATE intake SET status = 'missed' WHERE id = :id")
     suspend fun markMissed(id: Long)
+
+    /**
+     * Будущие невыполненные приёмы препарата снимаются, когда время приёма
+     * изменилось или препарат деактивирован. Иначе старые будильники продолжали
+     * бы звонить по прежнему расписанию.
+     */
+    @Query(
+        "SELECT id FROM intake WHERE medId = :medId " +
+            "AND status IN ('due', 'snoozed') AND dueAt >= :now"
+    )
+    suspend fun futurePendingIds(medId: Long, now: Long): List<Long>
+
+    @Query(
+        "UPDATE intake SET status = 'missed' WHERE medId = :medId " +
+            "AND status IN ('due', 'snoozed') AND dueAt >= :now"
+    )
+    suspend fun dropFuturePending(medId: Long, now: Long)
 
     @Query("UPDATE intake SET status = 'snoozed', dueAt = :dueAt WHERE id = :id")
     suspend fun snooze(id: Long, dueAt: Long)
