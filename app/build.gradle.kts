@@ -19,10 +19,11 @@ android {
 
     defaultConfig {
         applicationId = "ru.chronicnotebook"
-        minSdk = 26
+        // Android 6.0. Ниже 23 нельзя без переписывания вызовов getSystemService(Class).
+        minSdk = 23
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1"
+        versionName = "0.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -33,6 +34,12 @@ android {
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
+                // Прошивки Infinix/HiSense и часть кастомных установщиков
+                // отвергают APK только с v2-подписью. Включаем все схемы.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = false
             }
         }
     }
@@ -54,6 +61,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // java.time на Android появился только в API 26, а нужен с 23.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -79,6 +88,8 @@ dependencies {
     val lifecycle = "2.8.6"
     val navigation = "2.8.3"
     val workVersion = "2.9.1"
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
     implementation(platform("androidx.compose:compose-bom:$composeBom"))
     implementation("androidx.compose.ui:ui")

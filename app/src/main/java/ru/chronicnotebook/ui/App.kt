@@ -137,6 +137,8 @@ private fun HomeScreen(vm: MainViewModel) {
         }
     }
 
+    DiagnosticsCard()
+
     if (!vm.canScheduleExact()) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {

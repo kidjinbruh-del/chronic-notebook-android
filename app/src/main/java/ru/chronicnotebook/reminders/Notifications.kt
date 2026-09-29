@@ -18,6 +18,10 @@ object Notifications {
     private val time = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
 
     fun showIntake(context: Context, intake: IntakeEntity, medName: String, dose: String, step: Int) {
+        runCatching { show(context, intake, medName, dose, step) }
+    }
+
+    private fun show(context: Context, intake: IntakeEntity, medName: String, dose: String, step: Int) {
         val intent = Intent(context, IntakeActionReceiver::class.java).apply {
             action = IntakeActionReceiver.ACTION_TAKEN
             putExtra(IntakeActionReceiver.EXTRA_ID, intake.id)
@@ -49,15 +53,17 @@ object Notifications {
     }
 
     fun showMeasureHint(context: Context, slot: String) {
-        val notification = NotificationCompat.Builder(context, App.CHANNEL_MEASURE)
-            .setSmallIcon(R.drawable.ic_stat_pressure)
-            .setContentTitle("Время замера ($slot)")
-            .setContentText("Отдых 5 минут, сидя, и замер")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setContentIntent(openApp(context))
-            .setAutoCancel(true)
-            .build()
-        context.getSystemService(NotificationManager::class.java).notify(slot.hashCode(), notification)
+        runCatching {
+            val notification = NotificationCompat.Builder(context, App.CHANNEL_MEASURE)
+                .setSmallIcon(R.drawable.ic_stat_pressure)
+                .setContentTitle("Время замера ($slot)")
+                .setContentText("Отдых 5 минут, сидя, и замер")
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(openApp(context))
+                .setAutoCancel(true)
+                .build()
+            context.getSystemService(NotificationManager::class.java).notify(slot.hashCode(), notification)
+        }
     }
 
     private fun openApp(context: Context): PendingIntent {

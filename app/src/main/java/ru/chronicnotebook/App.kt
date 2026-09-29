@@ -7,14 +7,18 @@ import android.os.Build
 import ru.chronicnotebook.data.AppContainer
 
 class App : Application() {
-    lateinit var container: AppContainer
-        private set
+    val container: AppContainer by lazy { AppContainer(this) }
 
     override fun onCreate() {
         super.onCreate()
-        container = AppContainer(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
+        CrashLog.install(this)
+        createChannels()
+    }
+
+    private fun createChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        try {
+            val manager = getSystemService(NotificationManager::class.java) ?: return
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_INTAKE,
@@ -32,6 +36,8 @@ class App : Application() {
                     NotificationManager.IMPORTANCE_DEFAULT,
                 ).apply { description = "Подсказки о времени замера" }
             )
+        } catch (e: Exception) {
+            android.util.Log.w("ChronicNotebook", "Не удалось создать каналы уведомлений", e)
         }
     }
 
