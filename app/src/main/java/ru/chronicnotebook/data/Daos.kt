@@ -53,14 +53,36 @@ interface MedDao {
     @Query("UPDATE med SET active = 0 WHERE id = :id")
     suspend fun deactivate(id: Long)
 
+    @Query(
+        "UPDATE med SET name = :name, inn = :inn, dose = :dose, unit = :unit, " +
+            "withFood = :withFood, prescribedBy = :prescribedBy, sourceUrl = :sourceUrl WHERE id = :id"
+    )
+    suspend fun updateMed(
+        id: Long,
+        name: String,
+        inn: String,
+        dose: String,
+        unit: String,
+        withFood: Boolean,
+        prescribedBy: String,
+        sourceUrl: String,
+    )
+
     @Insert
     suspend fun insertSchedule(item: ScheduleEntity): Long
+
+    @Query("UPDATE schedule SET times = :times WHERE medId = :medId AND active = 1")
+    suspend fun updateScheduleTimes(medId: Long, times: String)
 
     @Query("SELECT * FROM schedule WHERE medId = :medId AND active = 1")
     fun schedulesFor(medId: Long): Flow<List<ScheduleEntity>>
 
     @Query("SELECT * FROM schedule WHERE active = 1")
     suspend fun allSchedulesOnce(): List<ScheduleEntity>
+
+    /** Расписание конкретного препарата для редактирования. */
+    @Query("SELECT * FROM schedule WHERE medId = :medId AND active = 1 ORDER BY id")
+    suspend fun schedulesForOnce(medId: Long): List<ScheduleEntity>
 }
 
 @Dao
@@ -139,7 +161,7 @@ interface ReminderLogDao {
         ReminderLogEntity::class,
     ],
     version = 1,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun measurementDao(): MeasurementDao
@@ -150,5 +172,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "chronic.db"
+
+        /**
+         * Намеренно пустой список: destructiveFallback убран, потому что он
+         * стирал все замеры и историю при любом обновлении схемы.
+         * Теперь при пропущенной миграции Room падает громко, а не молча
+         * уничтожает данные. При bump версии здесь появляется
+         * Migration(старый, новый), а JSON-схема попадает в app/schemas.
+         */
+        val MIGRATIONS: Array<androidx.room.migration.Migration> = emptyArray()
     }
 }

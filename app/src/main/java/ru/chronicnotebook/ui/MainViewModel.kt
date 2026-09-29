@@ -63,6 +63,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             Scheduler.start(getApplication())
+            // Перепланирование при каждом запуске: после обновления приложения
+            // или перезагрузки будильники и приёмы должны восстановиться сами.
+            IntakeScheduler(getApplication()).rescheduleAll()
             db.weatherDao().count().let { if (it == 0) Scheduler.syncNow(getApplication()) }
         }
     }
@@ -205,6 +208,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             db.medDao().deactivate(id)
             IntakeScheduler(getApplication()).rescheduleAll()
             _message.value = "Препарат деактивирован"
+        }
+    }
+
+    /** Текущие слоты приёма препарата для формы редактирования. */
+    suspend fun timesOf(medId: Long): List<Int> =
+        db.medDao().schedulesForOnce(medId)
+            .flatMap { it.times.split(',') }
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 0..(24 * 60 - 1) }
+            .distinct()
+            .sorted()
+
+    fun updateMed(
+        id: Long,
+        name: String,
+        dose: String,
+        unit: String,
+        withFood: Boolean,
+        prescribedBy: String,
+        times: List<Int>,
+    ) {
+        viewModelScope.launch {
+            db.medDao().updateMed(id, name, "", dose, unit, withFood, prescribedBy, "")
+            val clean = times.distinct().sorted()
+            if (clean.isEmpty()) {
+                _message.value = "Время приёма не задано: напоминания не будут приходить"
+            } else {
+                db.medDao().updateScheduleTimes(id, clean.joinToString(","))
+            }
+            IntakeScheduler(getApplication()).rescheduleAll()
+            refresh()
+            _message.value = "Изменения сохранены, напоминания пересчитаны"
         }
     }
 

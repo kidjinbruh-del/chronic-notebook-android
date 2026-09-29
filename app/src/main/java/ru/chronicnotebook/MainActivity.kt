@@ -8,9 +8,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.MaterialTheme
 import androidx.core.content.ContextCompat
 import ru.chronicnotebook.ui.App
+import ru.chronicnotebook.ui.theme.ChronicTheme
 
 class MainActivity : ComponentActivity() {
     private val requestNotifications =
@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { App() } }
+        setContent { ChronicTheme { App() } }
         askNotifications()
     }
 

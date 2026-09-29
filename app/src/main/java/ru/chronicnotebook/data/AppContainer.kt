@@ -16,7 +16,9 @@ class AppContainer(context: Context) {
 
     val db: AppDatabase by lazy {
         Room.databaseBuilder(appContext, AppDatabase::class.java, AppDatabase.NAME)
-            .fallbackToDestructiveMigration()
+            // Стирание базы при обновлении запрещено: замеры и историю
+            // нельзя потерять, поэтому падение лучше молчаливого сброса.
+            .addMigrations(*AppDatabase.MIGRATIONS)
             .build()
     }
 }

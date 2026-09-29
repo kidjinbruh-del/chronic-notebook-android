@@ -2,12 +2,15 @@ package ru.chronicnotebook.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,9 +18,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import ru.chronicnotebook.domain.Factor
+import ru.chronicnotebook.domain.Level
+import ru.chronicnotebook.domain.Stats
+import ru.chronicnotebook.domain.classify
 
 @Composable
 fun StatsScreen(vm: MainViewModel) {
@@ -25,49 +29,61 @@ fun StatsScreen(vm: MainViewModel) {
     val measurements by vm.measurements.collectAsStateWithLifecycle()
     val weather by vm.weather.collectAsStateWithLifecycle()
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Связи и динамика", style = MaterialTheme.typography.titleLarge)
+        item {
+            Text("Связи и динамика", style = MaterialTheme.typography.headlineSmall)
+        }
+        item { InfoCard("Личная база", state.baselineText) }
+        item { InfoCard("Погода и давление", state.factorText) }
+        item { InfoCard("Приём препаратов", state.adherenceText) }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Личная база", style = MaterialTheme.typography.titleMedium)
-                Text(state.baselineText, style = MaterialTheme.typography.bodyMedium)
-            }
+        item {
+            val valid = measurements.filter { it.valid }
+            val crisis = valid.count { classify(it.sys, it.dia) == Level.CRISIS }
+            val high = valid.count { classify(it.sys, it.dia) == Level.HIGH }
+            InfoCard(
+                title = "Пороги за 200 последних замеров",
+                body = buildString {
+                    if (valid.isEmpty()) {
+                        append("Нет корректных замеров.")
+                    } else {
+                        append("САД средний %.0f, ДАД средний %.0f\n".format(
+                            valid.map { it.sys }.average(),
+                            valid.map { it.dia }.average(),
+                        ))
+                        Stats.stdev(valid.map { it.sys })?.let {
+                            append("Разброс САД ±%.0f мм рт.ст.\n".format(it))
+                        }
+                        append("Кризисных: $crisis, повышенных: $high")
+                    }
+                },
+            )
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Погода и давление", style = MaterialTheme.typography.titleMedium)
-                Text(state.factorText, style = MaterialTheme.typography.bodyMedium)
+        item {
+            InfoCard(
+                title = "Сводка",
+                body = "Замеров в дневе: ${measurements.size}\nДней погоды в базе: ${weather.size}",
+            )
+        }
+        item {
+            FilledTonalButton(onClick = { vm.syncWeather() }, modifier = Modifier.fillMaxWidth()) {
+                Text("Синхронизировать погоду")
             }
         }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Приём препаратов", style = MaterialTheme.typography.titleMedium)
-                Text(state.adherenceText, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Сводка", style = MaterialTheme.typography.titleMedium)
-                Text("Замеров в дневе: ${measurements.size}")
-                Text("Дней погоды в базе: ${weather.size}")
-                TextButton2("Синхронизировать погоду") { vm.syncWeather() }
-            }
-        }
-
-        Spacer()
     }
 }
 
 @Composable
-private fun Spacer() {
-    androidx.compose.foundation.layout.Spacer(Modifier.padding(24.dp))
+private fun InfoCard(title: String, body: String) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(body, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
 }

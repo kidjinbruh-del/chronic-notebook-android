@@ -1,19 +1,24 @@
 package ru.chronicnotebook.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -21,14 +26,17 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -62,10 +70,17 @@ fun App() {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Дневник давления") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Дневник давления") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 Tab.entries.forEach { entry ->
                     NavigationBarItem(
                         selected = tab == entry,
@@ -76,14 +91,9 @@ fun App() {
                 }
             }
         },
+        containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
                 Tab.HOME -> HomeScreen(vm)
                 Tab.ADD -> MeasureScreen(vm)
@@ -103,51 +113,158 @@ private fun HomeScreen(vm: MainViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     var showReport by remember { mutableStateOf(false) }
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(state.weatherText, style = MaterialTheme.typography.bodyMedium)
-            Text(state.baselineText, style = MaterialTheme.typography.bodyMedium)
-            Text(state.adherenceText, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
+    // Раньше здесь не было прокрутки: при длинном отчёте и открытой диагностике
+    // нижние карточки становились недоступны.
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item { SummaryCard(state.weatherText, state.baselineText, state.adherenceText) }
+        item { ReportCard(vm, showReport) { showReport = it } }
+        item { DiagnosticsCard() }
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Последние замеры", style = MaterialTheme.typography.titleMedium)
-            items.take(20).forEach { m ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("${m.sys}/${m.dia}${m.pulse?.let { ", $it уд/мин" } ?: ""}")
-                    Text(fmt.format(Instant.ofEpochMilli(m.takenAt)), style = MaterialTheme.typography.bodySmall)
-                }
+        item {
+            Text(
+                "Последние замеры",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        if (items.isEmpty()) {
+            item {
+                EmptyHint("Замеров пока нет. Нажмите «Замер» на нижней панели.")
             }
-            if (items.isEmpty()) Text("Замеров пока нет")
-        }
-    }
-
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Отчёт для врача", style = MaterialTheme.typography.titleMedium)
-            TextButton2("Собрать отчёт") { showReport = true }
-            if (showReport) {
-                Text(vm.reportText(), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-
-    DiagnosticsCard()
-
-    if (!vm.canScheduleExact()) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text(
-                    "Точные будильники выключены в системе. Напоминания могут приходить с задержкой.",
-                    style = MaterialTheme.typography.bodySmall,
+        } else {
+            items(items.take(30), key = { it.id }) { m ->
+                MeasurementRow(
+                    sys = m.sys,
+                    dia = m.dia,
+                    pulse = m.pulse,
+                    time = fmt.format(Instant.ofEpochMilli(m.takenAt)),
+                    flagged = !m.valid,
+                    note = m.issues,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SummaryCard(weather: String, baseline: String, adherence: String) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Сводка", style = MaterialTheme.typography.titleMedium)
+            SummaryLine("Погода", weather)
+            SummaryLine("Личная база", baseline)
+            SummaryLine("Приём препаратов", adherence)
+        }
+    }
+}
+
+@Composable
+private fun SummaryLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 10.dp),
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun ReportCard(vm: MainViewModel, showReport: Boolean, onToggle: (Boolean) -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Отчёт для врача", style = MaterialTheme.typography.titleMedium)
+            FilledTonalButton(onClick = { onToggle(!showReport) }) {
+                Text(if (showReport) "Скрыть отчёт" else "Собрать отчёт")
+            }
+            if (showReport) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Text(
+                        vm.reportText(),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MeasurementRow(
+    sys: Int,
+    dia: Int,
+    pulse: Int?,
+    time: String,
+    flagged: Boolean,
+    note: String = "",
+) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (flagged) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    buildString {
+                        append("$sys/$dia")
+                        pulse?.let { append("  ·  $it уд/мин") }
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    time,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (flagged && note.isNotBlank()) {
+                Text(
+                    note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyHint(text: String) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(16.dp),
+        )
     }
 }
 

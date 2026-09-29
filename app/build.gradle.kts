@@ -22,8 +22,8 @@ android {
         // Android 6.0. Ниже 23 нельзя без переписывания вызовов getSystemService(Class).
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2"
+        versionCode = 2
+        versionName = "0.3"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -71,6 +71,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    ksp {
+        // JSON-схемы Room в app/schemas: по ним проверяются миграции,
+        // поэтому история замеров не может потеряться при обновлении.
+        arg("room.schemaLocation", "$projectDir/schemas")
     }
 
     packaging {
