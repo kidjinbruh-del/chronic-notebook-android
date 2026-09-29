@@ -62,7 +62,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            Scheduler.start(getApplication())
+            // Scheduler.start уже вызывается в App.onCreate: будильники и
+            // страховка должны работать и без открытия приложения.
             // Перепланирование при каждом запуске: после обновления приложения
             // или перезагрузки будильники и приёмы должны восстановиться сами.
             IntakeScheduler(getApplication()).rescheduleAll()

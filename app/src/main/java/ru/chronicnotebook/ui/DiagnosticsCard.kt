@@ -1,11 +1,6 @@
 package ru.chronicnotebook.ui
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -70,41 +65,6 @@ fun DiagnosticsCard() {
                 TextButton2("Отключить оптимизацию батареи") { openBatterySettings(context) }
             }
         }
-    }
-}
-
-private fun isBatteryRestricted(context: android.content.Context): Boolean {
-    val power = context.getSystemService(PowerManager::class.java) ?: return false
-    return runCatching { power.isIgnoringBatteryOptimizations(context.packageName) }.getOrDefault(true) == false
-}
-
-private fun openExactAlarmSettings(context: android.content.Context) {
-    runCatching {
-        context.startActivity(
-            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                .setData(Uri.fromParts("package", context.packageName, null))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }.onFailure { openAppSettings(context) }
-}
-
-private fun openBatterySettings(context: android.content.Context) {
-    runCatching {
-        context.startActivity(
-            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                .setData(Uri.fromParts("package", context.packageName, null))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }.onFailure { openAppSettings(context) }
-}
-
-private fun openAppSettings(context: android.content.Context) {
-    runCatching {
-        context.startActivity(
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                .setData(Uri.fromParts("package", context.packageName, null))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
     }
 }
 

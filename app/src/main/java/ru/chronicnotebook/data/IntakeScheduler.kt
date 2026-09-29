@@ -48,6 +48,25 @@ class IntakeScheduler(private val context: Context) {
             .mapNotNull { it.trim().toIntOrNull() }
             .filter { it in 0..(24 * 60 - 1) }
             .distinct()
+
+    /**
+     * Перевзводит будильники на ближайшие сутки, не трогая саму базу. Вызывается
+     * страховочным воркером: часть прошивок молча вычищает alarm, и без этого
+     * напоминание приходило бы только при ручном открытии приложения.
+     */
+    suspend fun rearmSoon() {
+        val now = System.currentTimeMillis()
+        val horizon = now + WINDOW
+        for (intake in db.intakeDao().since(now)) {
+            if (intake.status != IntakeEntity.STATUS_DUE) continue
+            if (intake.dueAt > horizon) continue
+            AlarmScheduler.scheduleExact(context, intake, intake.dueAt - now)
+        }
+    }
+
+    private companion object {
+        const val WINDOW = 24L * 60 * 60_000
+    }
 }
 
 fun MedEntity.activeOn(day: LocalDate): Boolean {

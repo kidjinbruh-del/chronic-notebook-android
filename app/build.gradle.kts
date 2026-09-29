@@ -22,8 +22,8 @@ android {
         // Android 6.0. Ниже 23 нельзя без переписывания вызовов getSystemService(Class).
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.3"
+        versionCode = 3
+        versionName = "0.4"
         vectorDrawables { useSupportLibrary = true }
     }
 

@@ -5,13 +5,21 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import ru.chronicnotebook.data.IntakeEntity
 
 /**
- * Обёртка над AlarmManager. На части прошивок (Infinix XOS, HiSense) вызов
- * setExactAndAllowWhileIdle бросает SecurityException даже после проверки
- * разрешения, поэтому любое исключение гасится и устройство переходит
- * на неточное расписание вместо падения.
+ * Обёртка над AlarmManager.
+ *
+ * Раньше здесь был вызов setExactAndAllowWhileIdle, а при отказе — setWindow на
+ * 10 минут. На агрессивных прошивках (Infinix XOS, HiSense) точные будильники
+ * запрещены по умолчанию, и setWindow растягивался системой на часы: будильник
+ * не срабатывал, пока пользователь сам не открывал приложение (тогда
+ * rescheduleAll ставил просроченному приёму alarm через секунду).
+ *
+ * Теперь основной механизм — setAlarmClock. Это единственный тип будильника,
+ * который гарантированно срабатывает в Doze, показывает значок будильника в
+ * строке состояния и не зависит от оптимизации батареи.
  */
 object AlarmScheduler {
     const val ACTION_INTAKE = "ru.chronicnotebook.ALARM_INTAKE"
@@ -22,19 +30,46 @@ object AlarmScheduler {
     fun scheduleExact(context: Context, intake: IntakeEntity, delayMillis: Long) {
         val manager = context.getSystemService(AlarmManager::class.java) ?: return
         val at = System.currentTimeMillis() + delayMillis.coerceAtLeast(1_000)
-        try {
-            if (canScheduleExact(manager)) {
-                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pendingIntent(context, intake.id))
-            } else {
-                manager.setWindow(AlarmManager.RTC_WAKEUP, at, WINDOW_MILLIS, pendingIntent(context, intake.id))
-            }
-        } catch (e: Exception) {
-            android.util.Log.w(TAG, "Точный будильник недоступен, ставлю окно", e)
-            runCatching {
-                manager.setWindow(AlarmManager.RTC_WAKEUP, at, WINDOW_MILLIS, pendingIntent(context, intake.id))
+        val pending = pendingIntent(context, intake.id)
+
+        // 1. setAlarmClock — максимальная надёжность, работает в Doze.
+        if (runCatching {
+                manager.setAlarmClock(AlarmManager.AlarmClockInfo(at, showIntent(context)), pending)
+            }.isSuccess
+        ) {
+            return
+        }
+        // 2. Точный будильник, если прошивка разрешает.
+        if (canScheduleExact(manager)) {
+            if (runCatching {
+                    manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
+                }.isSuccess
+            ) {
+                return
             }
         }
+        // 3. Неточный, но с будильным приоритетом: работает в Doze на старых
+        // версиях, где setAlarmClock может быть недоступен.
+        if (runCatching {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
+            }.isSuccess
+        ) {
+            Log.w(TAG, "Использован неточный будильник, система может задержать")
+            return
+        }
+        // 4. Последний вариант — обычный будильник без гарантии времени.
+        runCatching { manager.set(AlarmManager.RTC_WAKEUP, at, pending) }
+            .onFailure { Log.w(TAG, "Не удалось поставить будильник", it) }
     }
+
+    /** Значок будильника в строке состояния: по нему видно, что напоминание активно. */
+    private fun showIntent(context: Context): PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        Intent(context, ru.chronicnotebook.MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
 
     fun scheduleMeasureHint(context: Context, slot: String, atMillis: Long) {
         val manager = context.getSystemService(AlarmManager::class.java) ?: return
@@ -91,5 +126,4 @@ object AlarmScheduler {
     }
 
     private const val TAG = "ChronicNotebook"
-    private const val WINDOW_MILLIS = 10L * 60_000
 }

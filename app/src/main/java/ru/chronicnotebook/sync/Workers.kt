@@ -50,9 +50,33 @@ class DailyScheduleWorker(
     }
 }
 
+/**
+ * Страховка доставки. Некоторые прошивки (Infinix XOS, HiSense, MIUI) вычищают
+ * будильники и не доставляют точные alarm без открытия приложения. Раз в 15
+ * минут (минимальный интервал WorkManager) перевзводим ближайшие приёмы и
+ * досылаем просроченные, чтобы напоминание о лекарстве пришло в любом случае.
+ */
+class IntakeWatchdogWorker(
+    context: Context,
+    params: WorkerParameters,
+) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val app = applicationContext as App
+        return try {
+            IntakeScheduler(app).rearmSoon()
+            Escalator(app).catchUp(app.container.settings.escalate)
+            Result.success()
+        } catch (e: Exception) {
+            android.util.Log.w("ChronicNotebook", "Страховка будильников не отработала", e)
+            Result.retry()
+        }
+    }
+}
+
 object Scheduler {
     private const val SYNC = "weather_sync"
     private const val DAILY = "daily_schedule"
+    private const val WATCHDOG = "intake_watchdog"
 
     fun start(context: Context) {
         val manager = WorkManager.getInstance(context)
@@ -73,6 +97,16 @@ object Scheduler {
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<DailyScheduleWorker>(1, TimeUnit.DAYS)
                 .setInitialDelay(Duration.ofMinutes(5))
+                .build(),
+        )
+        // 15 минут — минимальный период, который разрешает WorkManager.
+        // Именно KEEP, а не UPDATE: UPDATE сбрасывал бы отсчёт при каждом
+        // запуске приложения, и при частом открытии страховка не срабатывала бы.
+        manager.enqueueUniquePeriodicWork(
+            WATCHDOG,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<IntakeWatchdogWorker>(15, TimeUnit.MINUTES)
+                .setInitialDelay(Duration.ofMinutes(1))
                 .build(),
         )
     }

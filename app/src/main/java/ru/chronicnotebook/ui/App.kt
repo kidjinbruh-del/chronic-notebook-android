@@ -120,7 +120,8 @@ private fun HomeScreen(vm: MainViewModel) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { SummaryCard(state.weatherText, state.baselineText, state.adherenceText) }
+        item { ReminderSetupCard() }
+    item { SummaryCard(state.weatherText, state.baselineText, state.adherenceText) }
         item { ReportCard(vm, showReport) { showReport = it } }
         item { DiagnosticsCard() }
 
