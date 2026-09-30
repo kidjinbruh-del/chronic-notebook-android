@@ -1,8 +1,11 @@
 package ru.chronicnotebook.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Medication
@@ -20,6 +24,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -28,9 +33,12 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,8 +48,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.chronicnotebook.data.TagEntity
+import ru.chronicnotebook.ui.theme.warmHeroBackground
+import ru.chronicnotebook.ui.theme.warmScreenBackground
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -64,6 +78,23 @@ fun App() {
     val message by vm.message.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { vm.bootstrap() }
+    // Автообновление живёт только пока приложение на экране: в фоне цикл
+    // крутился бы впустую и держал базу открытой.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> vm.startAutoRefresh()
+                Lifecycle.Event.ON_STOP -> vm.stopAutoRefresh()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            vm.stopAutoRefresh()
+        }
+    }
     LaunchedEffect(message) {
         message?.let {
             snackbar.showSnackbar(it)
@@ -76,8 +107,9 @@ fun App() {
             TopAppBar(
                 title = { Text("Дневник давления") },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = Color.Transparent,
                 ),
+                modifier = Modifier.background(ru.chronicnotebook.ui.theme.WarmChrome.topBar()),
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -93,9 +125,9 @@ fun App() {
                 }
             }
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        Box(Modifier.fillMaxSize().warmScreenBackground().padding(padding)) {
             when (tab) {
                 Tab.HOME -> HomeScreen(vm)
                 Tab.ADD -> MeasureScreen(vm)
@@ -113,7 +145,14 @@ private val fmt: DateTimeFormatter =
 private fun HomeScreen(vm: MainViewModel) {
     val items by vm.measurements.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
+    val allTags by vm.tags.collectAsStateWithLifecycle()
+    val tagLinks by vm.tagLinks.collectAsStateWithLifecycle()
     var showReport by remember { mutableStateOf(false) }
+    var tagging by remember { mutableStateOf<Long?>(null) }
+    val tagIdsByMeasurement = remember(tagLinks) {
+        tagLinks.groupBy({ it.measurementId }, { it.tagId }).mapValues { it.value.toSet() }
+    }
+    val tagsById = remember(allTags) { allTags.associateBy { it.id } }
 
     // Раньше здесь не было прокрутки: при длинном отчёте и открытой диагностике
     // нижние карточки становились недоступны.
@@ -147,18 +186,35 @@ private fun HomeScreen(vm: MainViewModel) {
                     time = fmt.format(Instant.ofEpochMilli(m.takenAt)),
                     flagged = !m.valid,
                     note = m.issues,
+                    tags = tagIdsByMeasurement[m.id].orEmpty().mapNotNull { tagsById[it] },
+                    onEditTags = { tagging = m.id },
                 )
             }
         }
+    }
+
+    tagging?.let { measurementId ->
+        val selected = tagIdsByMeasurement[measurementId].orEmpty()
+        TagPickerDialog(
+            title = "Метки замера",
+            allTags = allTags,
+            selectedIds = selected,
+            onToggle = { tagId -> vm.toggleTag(measurementId, tagId, tagId !in selected) },
+            onCreate = vm::createTag,
+            onDismiss = { tagging = null },
+        )
     }
 }
 
 @Composable
 private fun SummaryCard(weather: String, baseline: String, adherence: String) {
     Card(
-        Modifier.fillMaxWidth(),
+        Modifier
+            .fillMaxWidth()
+            .warmHeroBackground(androidx.compose.material3.CardDefaults.shape),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -221,6 +277,7 @@ private fun ReportCard(vm: MainViewModel, showReport: Boolean, onToggle: (Boolea
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MeasurementRow(
     sys: Int,
@@ -229,6 +286,8 @@ fun MeasurementRow(
     time: String,
     flagged: Boolean,
     note: String = "",
+    tags: List<TagEntity> = emptyList(),
+    onEditTags: (() -> Unit)? = null,
 ) {
     Card(
         Modifier.fillMaxWidth(),
@@ -265,6 +324,42 @@ fun MeasurementRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (tags.isEmpty()) {
+                    if (onEditTags != null) {
+                        TextButton(onClick = onEditTags) { Text("Метки") }
+                    }
+                } else {
+                    FlowRow(
+                        modifier = Modifier.weight(1f, fill = false),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        tags.forEach { tag ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                TagDot(tag.colorArgb)
+                                Text(
+                                    tag.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    if (onEditTags != null) {
+                        IconButton(onClick = onEditTags) {
+                            Icon(Icons.Filled.Edit, "Метки замера $sys/$dia")
+                        }
+                    }
+                }
             }
         }
     }

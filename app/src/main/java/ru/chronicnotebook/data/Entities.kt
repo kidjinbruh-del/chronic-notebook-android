@@ -2,6 +2,7 @@ package ru.chronicnotebook.data
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -22,6 +23,48 @@ data class MeasurementEntity(
     val issues: String = "",
     val note: String = "",
     @ColumnInfo(defaultValue = "rest") val bucket: String = "rest",
+)
+
+/**
+ * Словарь тегов. Заметки хранятся свободным текстом в замере, а теги —
+ * закрытым списком: по ним строится фильтр на графике и отчёте.
+ *
+ * `name` уникален, чтобы не плодить «Кофе», «кофе» и « кофе».
+ */
+@Entity(
+    tableName = "tag",
+    indices = [Index(value = ["name"], unique = true)],
+)
+data class TagEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val colorArgb: Int = 0,
+    val sortOrder: Int = 0,
+)
+
+/** Связь «замер — тег». Одна строка = один тег на замере. */
+@Entity(
+    tableName = "measurement_tag",
+    primaryKeys = ["measurementId", "tagId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = MeasurementEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["measurementId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+        ForeignKey(
+            entity = TagEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["tagId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("tagId")],
+)
+data class MeasurementTagEntity(
+    val measurementId: Long,
+    val tagId: Long,
 )
 
 @Entity(

@@ -28,6 +28,9 @@ fun StatsScreen(vm: MainViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     val measurements by vm.measurements.collectAsStateWithLifecycle()
     val weather by vm.weather.collectAsStateWithLifecycle()
+    val allTags by vm.tags.collectAsStateWithLifecycle()
+    val tagLinks by vm.tagLinks.collectAsStateWithLifecycle()
+    val tagUsage by vm.tagUsage.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -37,6 +40,21 @@ fun StatsScreen(vm: MainViewModel) {
         item {
             Text("Связи и динамика", style = MaterialTheme.typography.headlineSmall)
         }
+        item {
+            PressureChartCard(
+                measurements = measurements,
+                allTags = allTags,
+                tagLinks = tagLinks,
+            )
+        }
+        item {
+            TagDictionaryCard(
+                allTags = allTags,
+                usage = tagUsage.associate { it.tagId to it.n },
+                onDelete = { vm.deleteTag(it.id) },
+            )
+        }
+        item { ExchangeCard(vm) }
         item { InfoCard("Личная база", state.baselineText) }
         item { InfoCard("Погода и давление", state.factorText) }
         item { InfoCard("Приём препаратов", state.adherenceText) }

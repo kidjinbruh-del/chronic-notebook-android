@@ -2,6 +2,8 @@ package ru.chronicnotebook.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +19,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.chronicnotebook.domain.Context
 import ru.chronicnotebook.domain.Level
 import ru.chronicnotebook.domain.Protocol
@@ -43,6 +48,20 @@ fun MeasureScreen(vm: MainViewModel) {
     var spoke by remember { mutableStateOf(false) }
     var cuffOk by remember { mutableStateOf(true) }
     var note by remember { mutableStateOf("") }
+    var selectedTagIds by remember { mutableStateOf(emptySet<Long>()) }
+    var newTag by remember { mutableStateOf("") }
+    var pendingTag by remember { mutableStateOf<String?>(null) }
+    val allTags by vm.tags.collectAsStateWithLifecycle()
+
+    // Словарь обновляется асинхронно. Когда свежая метка появилась, выбираем её:
+    // иначе её пришлось бы искать вручную сразу после добавления.
+    LaunchedEffect(pendingTag, allTags) {
+        val name = pendingTag ?: return@LaunchedEffect
+        allTags.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let {
+            selectedTagIds = selectedTagIds + it.id
+            pendingTag = null
+        }
+    }
 
     val sysValue = sys.toIntOrNull()
     val diaValue = dia.toIntOrNull()
@@ -133,6 +152,46 @@ fun MeasureScreen(vm: MainViewModel) {
             modifier = Modifier.fillMaxWidth(),
         )
 
+        Text("Метки", style = MaterialTheme.typography.titleSmall)
+        TagPicker(
+            allTags = allTags,
+            selectedIds = selectedTagIds,
+            onToggle = { id ->
+                selectedTagIds = if (id in selectedTagIds) selectedTagIds - id else selectedTagIds + id
+            },
+        )
+        if (allTags.isEmpty()) {
+            SuggestedTags { pendingTag = it; vm.createTag(it) }
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                value = newTag,
+                onValueChange = { newTag = it },
+                label = { Text("Своя метка") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = {
+                    val clean = newTag.trim()
+                    if (clean.isEmpty()) return@TextButton
+                    val same = allTags.firstOrNull { it.name.equals(clean, ignoreCase = true) }
+                    if (same != null) {
+                        selectedTagIds = selectedTagIds + same.id
+                    } else {
+                        pendingTag = clean
+                        vm.createTag(clean)
+                    }
+                    newTag = ""
+                },
+                enabled = newTag.trim().isNotEmpty(),
+            ) { Text("Добавить") }
+        }
+
         if (valid) {
             val level = classify(sysValue!!, diaValue!!)
             val issues = Protocol.issues(sysValue, diaValue, ctx, rested, spoke, cuffOk)
@@ -160,6 +219,11 @@ fun MeasureScreen(vm: MainViewModel) {
 
         Button(
             onClick = {
+                // `pendingTag` уже добавлен в словарь вызовом createTag, но поток
+                // меток может ещё не обновиться. Передаём имя напрямую, иначе
+                // свежая метка терялась бы при быстром сохранении.
+                val names = (allTags.filter { it.id in selectedTagIds }.map { it.name } +
+                    listOfNotNull(pendingTag?.trim()?.takeIf { it.isNotEmpty() })).distinct()
                 vm.addMeasurement(
                     sys = sysValue ?: return@Button,
                     dia = diaValue ?: return@Button,
@@ -170,8 +234,11 @@ fun MeasureScreen(vm: MainViewModel) {
                     cuffOk = cuffOk,
                     note = note,
                     issued = false,
+                    tags = names,
                 )
-                sys = ""; dia = ""; pulse = ""; note = ""
+                sys = ""; dia = ""; pulse = ""; note = ""; newTag = ""
+                pendingTag = null
+                selectedTagIds = emptySet()
                 ctx = Context.REST
             },
             enabled = valid && !pulseBad,

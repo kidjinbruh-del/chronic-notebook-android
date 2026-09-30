@@ -1,86 +1,118 @@
 package ru.chronicnotebook.ui.theme
 
 import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 
-private val Green = Color(0xFF0B6E4F)
-private val GreenLight = Color(0xFF7FE3B0)
-private val GreenContainer = Color(0xFFB8F2D6)
-private val Ink = Color(0xFF11201A)
-private val Slate = Color(0xFF3E4A45)
-private val Warning = Color(0xFFB3261E)
-private val Crisis = Color(0xFF8C1D18)
+/**
+ * Фирменный тёплый чёрный.
+ *
+ * Фон — не нейтральный `#000`, а глубокий эспрессо: чёрный с коричневым
+ * подтоном. Акцент — янтарь вместо зелени: давление, события и предупреждения
+ * читаются как «тёплые», а не «больничные». Динамические цвета системы
+ * отключены намеренно: на Android 12+ они перекрашивали приложение под обои
+ * и убивали этот стиль.
+ */
+private val EspressoBlack = Color(0xFF14100A)
+private val WarmSurface = Color(0xFF1D1710)
+private val WarmSurfaceVariant = Color(0xFF2C2417)
+private val WarmWhite = Color(0xFFF4EAD9)
+private val WarmMuted = Color(0xFFCBB89F)
+private val Amber = Color(0xFFEFA94A)
+private val Caramel = Color(0xFFD08A4E)
+private val Gold = Color(0xFFB7A05E)
+private val WarmRed = Color(0xFFF0978A)
 
-private val LightColors = lightColorScheme(
-    primary = Green,
-    onPrimary = Color.White,
-    primaryContainer = GreenContainer,
-    onPrimaryContainer = Color(0xFF002114),
-    secondary = Color(0xFF4C6358),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCFE9DA),
-    onSecondaryContainer = Color(0xFF092017),
-    tertiary = Color(0xFF3D6373),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFC1E8FB),
-    onTertiaryContainer = Color(0xFF001F29),
-    error = Warning,
-    onError = Color.White,
-    errorContainer = Color(0xFFF9DEDC),
-    onErrorContainer = Color(0xFF410E0B),
-    background = Color(0xFFF5FBF6),
-    onBackground = Ink,
-    surface = Color.White,
-    onSurface = Ink,
-    surfaceVariant = Color(0xFFDBE5DE),
-    onSurfaceVariant = Slate,
-    outline = Color(0xFF6F7A74),
-    outlineVariant = Color(0xFFBFC9C2),
+private val WarmBlackColors = darkColorScheme(
+    primary = Amber,
+    onPrimary = Color(0xFF2A1A05),
+    primaryContainer = Color(0xFF4A2C0E),
+    onPrimaryContainer = Color(0xFFFFDDAE),
+    secondary = Caramel,
+    onSecondary = Color(0xFF2A1A08),
+    secondaryContainer = Color(0xFF3A2A18),
+    onSecondaryContainer = Color(0xFFF2D3AC),
+    tertiary = Gold,
+    onTertiary = Color(0xFF2E2708),
+    tertiaryContainer = Color(0xFF3A3018),
+    onTertiaryContainer = Color(0xFFE4D6A8),
+    error = WarmRed,
+    onError = Color(0xFF4A0F0A),
+    errorContainer = Color(0xFF5A1B12),
+    onErrorContainer = Color(0xFFFFD9D2),
+    background = EspressoBlack,
+    onBackground = WarmWhite,
+    surface = WarmSurface,
+    onSurface = WarmWhite,
+    // Контейнеры НЕ наследуются от surface: у них свои холодные дефолты,
+    // и без явных значений карточки становились серыми на тёплом фоне.
+    surfaceDim = Color(0xFF0E0B07),
+    surfaceBright = Color(0xFF3E3423),
+    surfaceContainerLowest = Color(0xFF0C0906),
+    surfaceContainerLow = Color(0xFF181309),
+    surfaceContainer = Color(0xFF201910),
+    surfaceContainerHigh = Color(0xFF2A2114),
+    surfaceContainerHighest = Color(0xFF362B1A),
+    surfaceVariant = WarmSurfaceVariant,
+    onSurfaceVariant = WarmMuted,
+    outline = Color(0xFF8A7660),
+    outlineVariant = Color(0xFF3A3126),
 )
 
-private val DarkColors = darkColorScheme(
-    primary = GreenLight,
-    onPrimary = Color(0xFF003824),
-    primaryContainer = Color(0xFF005236),
-    onPrimaryContainer = GreenContainer,
-    secondary = Color(0xFFB4CCBE),
-    onSecondary = Color(0xFF1F352B),
-    secondaryContainer = Color(0xFF354B41),
-    onSecondaryContainer = Color(0xFFCFE9DA),
-    tertiary = Color(0xFFA5CCDF),
-    onTertiary = Color(0xFF063544),
-    tertiaryContainer = Color(0xFF244C5B),
-    onTertiaryContainer = Color(0xFFC1E8FB),
-    error = Color(0xFFF2B8B5),
-    onError = Color(0xFF601410),
-    errorContainer = Crisis,
-    onErrorContainer = Color(0xFFF9DEDC),
-    background = Color(0xFF0F1512),
-    onBackground = Color(0xFFDDE5DE),
-    surface = Color(0xFF161D19),
-    onSurface = Color(0xFFDDE5DE),
-    surfaceVariant = Color(0xFF3E4A45),
-    onSurfaceVariant = Color(0xFFBFC9C2),
-    outline = Color(0xFF899390),
-    outlineVariant = Color(0xFF3E4A45),
-)
+/**
+ * Градиенты тёплого чёрного. Правило одно: градиент — это свет, а не картинка.
+ * Свет идёт сверху (экран, шапка) и изнутри главной карточки; остальное
+ * остаётся плоским, чтобы текст не терялся.
+ */
+object WarmChrome {
+    /** Лёгкое тёплое свечение сверху экрана, уходящее в глубину. */
+    @Composable
+    fun screen(): Brush = Brush.verticalGradient(
+        0.0f to Color(0xFF251B0E),
+        0.35f to EspressoBlack,
+        1.0f to Color(0xFF0E0B07),
+    )
+
+    /** Шапка: тёплая плашка, растворяющаяся в фоне. */
+    @Composable
+    fun topBar(): Brush = Brush.verticalGradient(
+        0.0f to Color(0xFF2A1F10),
+        1.0f to Color(0xFF171209),
+    )
+
+    /** Главная карточка сводки: янтарное ядро в тёмном корпусе. */
+    @Composable
+    fun heroCard(): Brush = Brush.linearGradient(
+        0.0f to Color(0xFF6B3E12),
+        0.55f to Color(0xFF3A2410),
+        1.0f to Color(0xFF241708),
+    )
+}
+
+/** Фоновая заливка экрана: градиент вместо плоского чёрного. */
+@Composable
+fun Modifier.warmScreenBackground(): Modifier = background(WarmChrome.screen())
+
+/** Градиентная карточка с нужной формой. */
+@Composable
+fun Modifier.warmHeroBackground(shape: Shape): Modifier =
+    background(WarmChrome.heroCard(), shape)
 
 private val AppTypography = Typography(
     headlineSmall = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, lineHeight = 30.sp),
@@ -95,32 +127,28 @@ private val AppTypography = Typography(
 )
 
 @Composable
-fun ChronicTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit,
-) {
-    val context = LocalContext.current
-    val colors = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
+fun ChronicTheme(content: @Composable () -> Unit) {
+    val colors = WarmBlackColors
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
-            window.statusBarColor = colors.background.toArgb()
-            window.navigationBarColor = colors.surface.toArgb()
+            window.statusBarColor = Color(0xFF251B0E).toArgb()
+            window.navigationBarColor = EspressoBlack.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !darkTheme
-                isAppearanceLightNavigationBars = !darkTheme
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
             }
         }
     }
 
-    MaterialTheme(colorScheme = colors, typography = AppTypography, content = content)
+    MaterialTheme(colorScheme = colors, typography = AppTypography) {
+        // Material3 не красит «голые» Text в цвет фона: по умолчанию они чёрные.
+        // На светлой теме это было незаметно, на тёплой чёрной заголовки экранов
+        // становились невидимыми. Цвет задаётся один раз здесь, а не в каждом Text.
+        CompositionLocalProvider(LocalContentColor provides colors.onBackground) {
+            content()
+        }
+    }
 }

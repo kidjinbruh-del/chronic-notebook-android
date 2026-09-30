@@ -14,6 +14,12 @@ interface MeasurementDao {
     @Insert
     suspend fun insert(item: MeasurementEntity): Long
 
+    @Insert
+    suspend fun insertAll(items: List<MeasurementEntity>)
+
+    @Update
+    suspend fun update(item: MeasurementEntity)
+
     @Query("SELECT * FROM measurement ORDER BY takenAt DESC LIMIT :limit")
     fun recent(limit: Int): Flow<List<MeasurementEntity>>
 
@@ -188,16 +194,74 @@ interface ReminderLogDao {
     suspend fun insert(item: ReminderLogEntity): Long
 }
 
+/** Сколько замеров помечено каждым тегом. */
+data class TagUsage(
+    val tagId: Long,
+    val n: Int,
+)
+
+@Dao
+interface TagDao {
+    @Query("SELECT * FROM tag ORDER BY sortOrder, name")
+    fun all(): Flow<List<TagEntity>>
+
+    @Query("SELECT * FROM tag ORDER BY sortOrder, name")
+    suspend fun allOnce(): List<TagEntity>
+
+    @Query("SELECT * FROM tag WHERE name = :name LIMIT 1")
+    suspend fun byName(name: String): TagEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(item: TagEntity): Long
+
+    @Query("UPDATE tag SET name = :name, colorArgb = :colorArgb WHERE id = :id")
+    suspend fun rename(id: Long, name: String, colorArgb: Int)
+
+    /**
+     * Тег удаляется вместе со связями. Связи снимаем явно, а не только каскадом:
+     * на старых прошивках внешние ключи иногда не включены, и иначе остались бы
+     * строки, ссылающиеся на несуществующий тег, а счётчики разъезжались бы.
+     */
+    @Query("DELETE FROM measurement_tag WHERE tagId = :id")
+    suspend fun unlinkEverywhere(id: Long)
+
+    @Query("DELETE FROM tag WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query(
+        "SELECT t.* FROM tag t INNER JOIN measurement_tag mt ON mt.tagId = t.id " +
+            "WHERE mt.measurementId = :measurementId ORDER BY t.sortOrder, t.name"
+    )
+    suspend fun tagsOf(measurementId: Long): List<TagEntity>
+
+    @Query("SELECT tagId FROM measurement_tag WHERE measurementId = :measurementId")
+    suspend fun tagIdsOf(measurementId: Long): List<Long>
+
+    @Query("SELECT * FROM measurement_tag")
+    suspend fun allLinksOnce(): List<MeasurementTagEntity>
+
+    @Query("INSERT OR IGNORE INTO measurement_tag (measurementId, tagId) VALUES (:measurementId, :tagId)")
+    suspend fun link(measurementId: Long, tagId: Long)
+
+    @Query("DELETE FROM measurement_tag WHERE measurementId = :measurementId AND tagId = :tagId")
+    suspend fun unlink(measurementId: Long, tagId: Long)
+
+    @Query("SELECT tagId AS tagId, COUNT(*) AS n FROM measurement_tag GROUP BY tagId")
+    fun usage(): Flow<List<TagUsage>>
+}
+
 @Database(
     entities = [
         MeasurementEntity::class,
+        TagEntity::class,
+        MeasurementTagEntity::class,
         MedEntity::class,
         ScheduleEntity::class,
         IntakeEntity::class,
         WeatherEntity::class,
         ReminderLogEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -206,17 +270,50 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun intakeDao(): IntakeDao
     abstract fun weatherDao(): WeatherDao
     abstract fun reminderLogDao(): ReminderLogDao
+    abstract fun tagDao(): TagDao
 
     companion object {
         const val NAME = "chronic.db"
 
         /**
-         * Намеренно пустой список: destructiveFallback убран, потому что он
-         * стирал все замеры и историю при любом обновлении схемы.
-         * Теперь при пропущенной миграции Room падает громко, а не молча
-         * уничтожает данные. При bump версии здесь появляется
-         * Migration(старый, новый), а JSON-схема попадает в app/schemas.
+         * 1 -> 2: словарь тегов и связи с замерами.
+         *
+         * Только CREATE: ни одна существующая таблица не меняется, поэтому
+         * история замеров и приёмов сохраняется при обновлении. Порядок
+         * важен — сначала tag, потом таблица со ссылкой на неё.
          */
-        val MIGRATIONS: Array<androidx.room.migration.Migration> = emptyArray()
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `tag` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`colorArgb` INTEGER NOT NULL, " +
+                        "`sortOrder` INTEGER NOT NULL DEFAULT 0)"
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_tag_name` ON `tag` (`name`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `measurement_tag` (" +
+                        "`measurementId` INTEGER NOT NULL, " +
+                        "`tagId` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`measurementId`, `tagId`), " +
+                        "FOREIGN KEY(`measurementId`) REFERENCES `measurement`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE , " +
+                        "FOREIGN KEY(`tagId`) REFERENCES `tag`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_measurement_tag_tagId` " +
+                        "ON `measurement_tag` (`tagId`)"
+                )
+            }
+        }
+
+        /**
+         * Намеренно без destructiveFallback: он стирал все замеры и историю
+         * при любом обновлении схемы. Теперь при пропущенной миграции Room
+         * падает громко, а не молча уничтожает данные.
+         */
+        val MIGRATIONS: Array<androidx.room.migration.Migration> = arrayOf(MIGRATION_1_2)
     }
 }

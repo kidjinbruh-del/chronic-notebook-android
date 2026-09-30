@@ -29,9 +29,14 @@ android {
         // явный отказ от установки, поэтому порог остаётся на 23.
         minSdk = 23
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.6"
+        versionCode = 6
+        versionName = "0.7"
         vectorDrawables { useSupportLibrary = true }
+
+        // Без этого AGP подставляет android.test.InstrumentationTestRunner:
+        // он не понимает @RunWith(AndroidJUnit4) и роняет процесс, поэтому
+        // connected-тесты падали с «Process crashed» ещё до первого теста.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -127,6 +132,13 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.11.0")
+
+    // График давления. Compose-реализация: тот же язык разметки, что и у
+    // остальных экранов, без View-моста. Тяжёлых зависимостей внутри нет,
+    // шрифты и анимации — нативные. Модуль compose-m3 не подключается:
+    // он публикуется без androidJvm-варианта и не резолвится, поэтому
+    // цвета задаются явно.
+    implementation("com.patrykandpatrick.vico:compose:2.0.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

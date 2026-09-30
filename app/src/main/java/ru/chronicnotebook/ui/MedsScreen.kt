@@ -114,15 +114,13 @@ private fun MedCard(
     onEdit: (List<Int>) -> Unit,
 ) {
     var times by remember(med.id) { mutableStateOf(emptyList<Int>()) }
-    var loaded by remember(med.id) { mutableStateOf(false) }
-
-    // Слоты приёма подтягиваются из БД, чтобы карточка и форма
-    // показывали одинаковое расписание.
-    LaunchedEffect(med.id) {
-        if (!loaded) {
-            times = vm.timesOf(med.id)
-            loaded = true
-        }
+    // Каждый пересчёт (refreshNow поднимает tick) перечитывает слоты заново.
+    // Раньше было LaunchedEffect(med.id), поэтому после правки расписания
+    // карточка продолжала показывать старое время, хотя напоминание
+    // уже было пересчитано на новое.
+    val tick by vm.tick.collectAsStateWithLifecycle()
+    LaunchedEffect(med.id, tick) {
+        times = vm.timesOf(med.id)
     }
 
     Card(Modifier.fillMaxWidth()) {
