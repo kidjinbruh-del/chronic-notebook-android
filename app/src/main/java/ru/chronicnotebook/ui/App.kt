@@ -45,6 +45,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class Tab(val title: String, val icon: ImageVector) {
     HOME("Дом", Icons.Filled.Favorite),
@@ -183,19 +185,33 @@ private fun SummaryLine(label: String, value: String) {
 
 @Composable
 private fun ReportCard(vm: MainViewModel, showReport: Boolean, onToggle: (Boolean) -> Unit) {
+    var text by remember(showReport) { mutableStateOf<String?>(null) }
+    var loading by remember(showReport) { mutableStateOf(false) }
+
+    // Раньше отчёт собирался прямо в теле composable: каждая перерисовка
+    // заново пересчитывала статистику и корреляции на главном потоке.
+    LaunchedEffect(showReport) {
+        if (!showReport) return@LaunchedEffect
+        loading = true
+        text = withContext(Dispatchers.IO) { vm.buildReport() }
+        loading = false
+    }
+
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Отчёт для врача", style = MaterialTheme.typography.titleMedium)
             FilledTonalButton(onClick = { onToggle(!showReport) }) {
                 Text(if (showReport) "Скрыть отчёт" else "Собрать отчёт")
             }
-            if (showReport) {
-                Surface(
+            when {
+                loading -> Text("Собираю отчёт…", style = MaterialTheme.typography.bodySmall)
+                !showReport -> Unit
+                else -> Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = MaterialTheme.shapes.small,
                 ) {
                     Text(
-                        vm.reportText(),
+                        text.orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(12.dp),
                     )

@@ -8,7 +8,9 @@ import ru.chronicnotebook.domain.Bucket
 import ru.chronicnotebook.domain.Correlation
 import ru.chronicnotebook.domain.Factor
 import ru.chronicnotebook.domain.Level
+import ru.chronicnotebook.domain.Protocol
 import ru.chronicnotebook.domain.Stats
+import ru.chronicnotebook.domain.Thresholds
 import ru.chronicnotebook.domain.advice
 import ru.chronicnotebook.domain.bucketOf
 import ru.chronicnotebook.domain.classify
@@ -38,7 +40,9 @@ class ReportBuilder(
         out.appendLine()
 
         out.appendLine("ПРОТОКОЛ")
-        val noRest = inWindow.count { !it.issues.contains("не отдыхал") }
+        // Считаем те записи, где проблема ЕСТЬ. Раньше стояло отрицание, и цифра
+        // показывала ровно обратное: сколько замеров сделано правильно.
+        val noRest = inWindow.count { it.issues.contains(Protocol.NO_REST) }
         out.appendLine("Без 5-минутного покоя: $noRest")
         out.appendLine("В нерестовом состоянии: ${inWindow.count { it.context != "rest" }}")
         out.appendLine()
@@ -56,7 +60,7 @@ class ReportBuilder(
             valid.mapNotNull { it.pulse }.takeIf { it.isNotEmpty() }?.let {
                 out.appendLine("Пульс средний %.0f, макс %d".format(it.average(), it.max()))
             }
-            out.appendLine("Разброс САД ±%.0f мм рт.ст.".format(Stats.stdev(valid.map { it.sys }) ?: 0.0))
+            out.appendLine(Stats.stdev(valid.map { it.sys })?.let { "Разброс САД ±%.0f мм рт.ст.".format(it) } ?: "Разброс САД: недостаточно замеров")
             Bucket.values().forEach { bucket ->
                 val rows = valid.filter { bucketOf(it.hour()) == bucket }
                 if (rows.isNotEmpty()) {
@@ -88,10 +92,14 @@ class ReportBuilder(
             out.appendLine()
         }
 
-        val sensitivity = Correlation.sensitivity(measurements, weather)
+        // Корреляции считаем по тому же окну, о котором написано в шапке отчёта.
+        val sensitivity = Correlation.sensitivity(inWindow, weather)
         out.appendLine("СВЯЗЬ С ПОГОДОЙ")
         if (!sensitivity.ready) {
-            out.appendLine("Недостаточно данных: ${sensitivity.n} из 20 корректных замеров.")
+            out.appendLine(
+                "Недостаточно данных: ${sensitivity.n} из ${Thresholds.CORRELATION_MIN_N} " +
+                    "корректных замеров."
+            )
         } else if (sensitivity.factors.isEmpty()) {
             out.appendLine("Устойчивых корреляций не выявлено (r >= 0.30 не достигнут).")
         } else {
@@ -104,8 +112,15 @@ class ReportBuilder(
         out.appendLine()
 
         out.appendLine("ПОГОДА (последние 3 дня)")
+        if (weather.isEmpty()) {
+            out.appendLine("  нет данных")
+        }
         weather.takeLast(3).forEach { w ->
-            out.appendLine("  %s: %.1f °C, %.0f мм рт.ст.".format(w.day, w.tMean ?: 0.0, w.pMsl ?: 0.0))
+            // Раньше отсутствующее значение печаталось как 0.0 °C и 0 мм рт.ст.
+            // Врач принимал это за реальные показания.
+            val temp = w.tMean?.let { "%.1f °C".format(it) } ?: "н/д"
+            val press = w.pMsl?.let { "%.0f мм рт.ст.".format(it) } ?: "н/д"
+            out.appendLine("  ${w.day}: $temp, $press")
         }
         out.appendLine()
 
@@ -120,6 +135,6 @@ class ReportBuilder(
 
     fun todayAdvice(): String {
         val now = bucketOf(Instant.now().atZone(ZoneId.systemDefault()).hour)
-        return "Следующий замер: ${now.label}. Отдых 5 минут, сидя, две цифры через минуту."
+        return "Сейчас ${now.label}. Отдых 5 минут, сидя, две цифры через минуту."
     }
 }

@@ -23,6 +23,7 @@ import ru.chronicnotebook.domain.Stats
 import ru.chronicnotebook.domain.advice
 import ru.chronicnotebook.domain.bucketOf
 import ru.chronicnotebook.domain.classify
+import ru.chronicnotebook.domain.snoozedDueAt
 import ru.chronicnotebook.reminders.AlarmScheduler
 import ru.chronicnotebook.reminders.Escalator
 import ru.chronicnotebook.sync.Scheduler
@@ -59,6 +60,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+
+    /**
+     * Тик после каждого пересчёта. Экраны, которые грузят списки отдельным
+     * запросом, слушают его: раньше после нажатия «Принял» карточка приёма
+     * оставалась на экране до ухода на другую вкладку.
+     */
+    private val _tick = MutableStateFlow(0)
+    val tick: StateFlow<Int> = _tick.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -106,11 +115,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
             _message.value = if (issues.isEmpty()) "Записан. ${advice(level, sys, dia)}" else
                 "Записан с пометками: ${issues.joinToString(", ")}"
+            // Пересчёт обязателен: карточки «Личная база», «Погода и давление»
+            // и adherence на главном экране живут в UiState, который собирает
+            // только refresh(). Без него после записи замера человек уходил на
+            // «Дом» и видел «нужно 14 корректных замеров (сейчас 0)», хотя замер
+            // только что введён. Замерений могло быть и тринадцать — счётчик
+            // не двигался до перезапуска приложения.
+            refresh()
         }
     }
 
     fun deleteMeasurement(id: Long) {
-        viewModelScope.launch { db.measurementDao().delete(id) }
+        viewModelScope.launch {
+            db.measurementDao().delete(id)
+            refresh()
+        }
     }
 
     fun refresh() {
@@ -147,12 +166,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            val intake = db.intakeDao().since(System.currentTimeMillis() - 30L * 24 * 3600_000)
+            val now = System.currentTimeMillis()
+            // Знаменатель — только те приёмы, которые уже наступили. Раньше сюда
+            // попадали и будущие, и «принято 5 из 190» выглядело как полный
+            // провал при пяти выполненных назначениях.
+            val intake = db.intakeDao().between(now - 30L * 24 * 3600_000, now)
             val taken = intake.count { it.status == IntakeEntity.STATUS_TAKEN }
             val missed = intake.count { it.status == IntakeEntity.STATUS_MISSED }
+            val pending = intake.count { it.status == IntakeEntity.STATUS_DUE }
             val adherenceText = if (intake.isEmpty()) "Нет данных о приёме" else {
-                "Принято $taken из ${taken + missed + intake.count { it.status == IntakeEntity.STATUS_DUE }} " +
-                    "за 30 дней, пропущено $missed"
+                "Принято $taken из ${taken + missed + pending} за 30 дней, пропущено $missed"
             }
 
             val today = db.weatherDao().byDay(LocalDate.now().toString())
@@ -168,6 +191,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 adherenceText = adherenceText,
                 weatherText = weatherText,
             )
+            _tick.value++
         }
     }
 
@@ -244,13 +268,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             db.medDao().updateMed(id, name, dose, unit, withFood, prescribedBy)
             val clean = times.distinct().sorted()
             if (clean.isEmpty()) {
-                _message.value = "Время приёма не задано: напоминания не будут приходить"
+                _message.value = "Время приёма не задано: напоминания приходить не будут"
             } else {
                 db.medDao().updateScheduleTimes(id, clean.joinToString(","))
+                _message.value = "Изменения сохранены, напоминания пересчитаны"
             }
             IntakeScheduler(getApplication()).rescheduleAll()
             refresh()
-            _message.value = "Изменения сохранены, напоминания пересчитаны"
         }
     }
 
@@ -264,10 +288,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun snoozeIntake(id: Long, minutes: Long) {
         viewModelScope.launch {
-            val due = System.currentTimeMillis() + minutes * 60_000
-            db.intakeDao().snooze(id, due)
             val intake = db.intakeDao().byId(id) ?: return@launch
-            AlarmScheduler.scheduleExact(getApplication(), intake, minutes * 60_000)
+            val now = System.currentTimeMillis()
+            val due = snoozedDueAt(intake.dueAt, now, minutes)
+            db.intakeDao().snooze(id, due)
+            AlarmScheduler.scheduleExact(getApplication(), intake, due - now)
+            refresh()
         }
     }
 
@@ -276,7 +302,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _message.value = "Синхронизация погоды запущена"
     }
 
-    fun reportText(): String = ReportBuilder(getApplication(), measurements.value, weather.value).build()
+    /**
+     * Отчёт для врача собирается по всей базе, а не по последним 200 строкам
+     * списка на экране: иначе при большом дневнике счётчики в отчёте были тихо
+     * занижены, а врач принимал их за реальную картину.
+     */
+    suspend fun buildReport(): String {
+        val since = System.currentTimeMillis() - 30L * 24 * 3600_000
+        val rows = db.measurementDao().allSinceOnce(since)
+        val w = db.weatherDao().historySinceOnce(LocalDate.now().minusDays(120).toString())
+        return ReportBuilder(getApplication(), rows, w).build()
+    }
 
     suspend fun pendingIntakes(): List<IntakeEntity> =
         db.intakeDao().dueNow(System.currentTimeMillis() + 60 * 60_000)
@@ -289,7 +325,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun bootstrap() {
         Scheduler.scheduleMeasureHints(getApplication())
-        Escalator(getApplication()).catchUp(settings.escalate)
+        viewModelScope.launch { Escalator(getApplication()).catchUp() }
         refresh()
     }
 

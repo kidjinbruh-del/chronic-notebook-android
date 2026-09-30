@@ -2,6 +2,8 @@ package ru.chronicnotebook.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -156,10 +158,12 @@ private fun MedCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PendingIntakes(vm: MainViewModel, meds: Map<Long, MedEntity>) {
     var rows by remember { mutableStateOf(emptyList<IntakeEntity>()) }
-    LaunchedEffect(Unit) { rows = vm.pendingIntakes() }
+    val tick by vm.tick.collectAsStateWithLifecycle()
+    LaunchedEffect(tick) { rows = vm.pendingIntakes() }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Ожидают отметки", style = MaterialTheme.typography.titleMedium)
@@ -175,7 +179,7 @@ private fun PendingIntakes(vm: MainViewModel, meds: Map<Long, MedEntity>) {
                         "${med?.name ?: "препарат"} — ${Notifications.humanTime(intake.dueAt)}",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { vm.takeIntake(intake.id) }) { Text("Принял") }
                         TextButton2("Через 15 мин") { vm.snoozeIntake(intake.id, 15) }
                     }

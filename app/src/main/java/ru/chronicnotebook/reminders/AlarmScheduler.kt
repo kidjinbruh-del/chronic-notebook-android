@@ -119,11 +119,15 @@ object AlarmScheduler {
         }
         return PendingIntent.getBroadcast(
             context,
-            intakeId.toInt(),
+            // Схлопываем старшие биты: голый toInt() при id больше 2^31
+            // наезжал на чужой requestCode, и будильник одного приёма сносил другой.
+            requestCode(intakeId),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
+
+    internal fun requestCode(id: Long): Int = (id xor (id ushr 32)).toInt()
 
     private const val TAG = "ChronicNotebook"
 }

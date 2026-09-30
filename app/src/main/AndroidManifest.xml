@@ -37,10 +37,18 @@
             android:exported="false" />
 
         <receiver
+            android:name=".reminders.IntakeActionReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".reminders.BootReceiver"
+            android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- После обновления система снимает все будильники. Без этого
+                     действия напоминания не вернулись бы до запуска приложения. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
     </application>

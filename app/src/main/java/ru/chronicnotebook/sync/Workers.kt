@@ -44,9 +44,14 @@ class DailyScheduleWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as App
-        IntakeScheduler(app).rescheduleAll()
-        Escalator(app).catchUp(app.container.settings.escalate)
-        return Result.success()
+        return try {
+            IntakeScheduler(app).rescheduleAll()
+            Escalator(app).catchUp()
+            Result.success()
+        } catch (e: Exception) {
+            android.util.Log.w("ChronicNotebook", "Планировщик не отработал", e)
+            Result.retry()
+        }
     }
 }
 
@@ -64,7 +69,7 @@ class IntakeWatchdogWorker(
         val app = applicationContext as App
         return try {
             IntakeScheduler(app).rearmSoon()
-            Escalator(app).catchUp(app.container.settings.escalate)
+            Escalator(app).catchUp()
             Result.success()
         } catch (e: Exception) {
             android.util.Log.w("ChronicNotebook", "Страховка будильников не отработала", e)
@@ -124,18 +129,20 @@ object Scheduler {
     }
 
     fun scheduleMeasureHints(context: Context) {
-        val now = LocalTime.now()
         AlarmScheduler.scheduleMeasureHint(context, "утро", System.currentTimeMillis() + untilMillis(8, 30))
         AlarmScheduler.scheduleMeasureHint(context, "вечер", System.currentTimeMillis() + untilMillis(20, 30))
-        if (now.hour >= 21) {
-            AlarmScheduler.scheduleMeasureHint(
-                context,
-                "утро",
-                System.currentTimeMillis() + Duration.ofDays(1).toMillis() + untilMillis(8, 30),
-            )
-        }
     }
 
+    /**
+     * Milliseconds until the next occurrence of hour:minute, tomorrow if it passed.
+     *
+     * Раньше здесь была отдельная ветка «если уже после 21:00, поставить утро на
+     * завтра». Она была лишней и вредной: [untilMillis] и так возвращает ближайшие
+     * 08:30, то есть завтрашние, а добавка в сутки сдвигала утреннюю подсказку на
+     * послезавтра. PendingIntent у обеих установок один и тот же, поэтому второе
+     * значение просто перезаписывало первое, и вечером открытое приложение
+     * молча отменяло напоминание о замере на следующее утро.
+     */
     private fun untilMillis(hour: Int, minute: Int): Long {
         val target = LocalTime.of(hour, minute)
         val now = LocalTime.now()

@@ -28,7 +28,11 @@ import ru.chronicnotebook.reminders.AlarmScheduler
 fun DiagnosticsCard() {
     val context = LocalContext.current
     var showCrash by remember { mutableStateOf(false) }
-    val crash = remember { CrashLog.last(context) }
+    // Не remember { CrashLog.last(...) }, а состояние: после «Скопировать и
+    // очистить» значение из лога меняется, и карточка обязана это показать.
+    // Иначе текст сбоя висел бы на экране, хотя лог уже пуст, и человек,
+    // разбирающий поломку, смотрел бы на заведомо устаревшие данные.
+    var crash by remember { mutableStateOf(CrashLog.last(context)) }
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -42,20 +46,22 @@ fun DiagnosticsCard() {
             if (isBatteryRestricted(context)) {
                 Text("Оптимизация батареи: включена, система может глушить напоминания")
             }
-            if (crash != null) {
+            // ?.let вместо if (crash != null): после смены на delegated property
+            // компилятор уже не может smart-cast значение в String?.
+            crash?.let { text ->
                 Text("---")
                 if (!showCrash) {
                     TextButton2("Показать причину последнего сбоя") { showCrash = true }
                 } else {
-                    Text(crash.take(2500), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    Text(text.take(2500), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                     TextButton2("Скопировать и очистить") {
-                        copyToClipboard(context, crash)
+                        copyToClipboard(context, text)
                         CrashLog.clear(context)
+                        crash = CrashLog.last(context)
+                        showCrash = false
                     }
                 }
-            } else {
-                Text("Сбоев не зафиксировано", style = MaterialTheme.typography.bodySmall)
-            }
+            } ?: Text("Сбоев не зафиксировано", style = MaterialTheme.typography.bodySmall)
             if (!AlarmScheduler.canScheduleExact(context)) {
                 TextButton2("Разрешить точные будильники") {
                     openExactAlarmSettings(context)

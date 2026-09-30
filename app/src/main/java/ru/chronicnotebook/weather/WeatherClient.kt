@@ -156,7 +156,10 @@ class WeatherClient(private val settings: Settings) {
         http.newCall(request).execute().use { response ->
             if (!response.isSuccessful) null else response.body?.string()
         }
-    } catch (e: IOException) {
+    } catch (e: Exception) {
+        // Не только IOException: битая строка часового пояса в настройках даёт
+        // IllegalArgumentException прямо из Request.Builder, и синхронизация
+        // молча переставала работать вместо тихой отказа.
         Log.w(TAG, "request failed: $url", e)
         null
     }

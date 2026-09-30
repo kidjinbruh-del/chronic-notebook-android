@@ -37,20 +37,31 @@ data class WeatherDelta(
 )
 
 object WeatherMath {
+    /**
+     * Разница с предыдущим днём. Если в архиве пропущен день, предыдущая точка
+     * отстояла на двое суток, и такая разность подсовывалась под «изменение за
+     * сутки». Такие пары просто не учитываются.
+     */
     fun deltas(rows: List<WeatherEntity>): List<WeatherDelta> {
         val out = ArrayList<WeatherDelta>(rows.size)
         rows.forEachIndexed { index, row ->
             val prev = rows.getOrNull(index - 1)
+            val contiguous = prev != null && consecutiveDays(prev.day, row.day)
             out += WeatherDelta(
                 day = row.day,
                 tMean = row.tMean,
                 pMsl = row.pMsl,
-                dT24 = diff(row.tMean, prev?.tMean),
-                dP24 = diff(row.pMsl, prev?.pMsl),
+                dT24 = if (contiguous) diff(row.tMean, prev?.tMean) else null,
+                dP24 = if (contiguous) diff(row.pMsl, prev?.pMsl) else null,
             )
         }
         return out
     }
+
+    /** Соседние ли даты в архиве. Битая строка даты считается разрывом, а не падением. */
+    private fun consecutiveDays(previous: String, current: String): Boolean = runCatching {
+        java.time.LocalDate.parse(previous).plusDays(1) == java.time.LocalDate.parse(current)
+    }.getOrDefault(false)
 
     private fun diff(current: Double?, previous: Double?): Double? =
         if (current == null || previous == null) null else current - previous
@@ -90,6 +101,7 @@ object Correlation {
                 }
                 val r = pearson(xs, ys) ?: continue
                 if (kotlin.math.abs(r) < Thresholds.R_THRESHOLD) continue
+                if (xs.size < Thresholds.FACTOR_MIN_N) continue
                 val slope = slope(xs, ys) ?: continue
                 found += Factor(field, kind, label, lag, r, slope, xs.size)
             }

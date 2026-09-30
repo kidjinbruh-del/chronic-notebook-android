@@ -131,8 +131,28 @@ interface IntakeDao {
     @Query("UPDATE intake SET lastStepSent = :step WHERE id = :id")
     suspend fun setStep(id: Long, step: Int)
 
+    /**
+     * Смена ступени эскалации только если она ещё равна ожидаемой.
+     *
+     * Будильник и сторож (воркер раз в 15 минут) могут обработать один приём
+     * одновременно. Раньше обе ветки читали lastStepSent, обе слали уведомление
+     * и обе писали ступень — пользователь получал два одинаковых напоминания.
+     * Теперь выигрывает только один: UPDATE возвращает 1 строку, и вторая
+     * ветка тихо выходит.
+     */
+    @Query("UPDATE intake SET lastStepSent = :step WHERE id = :id AND lastStepSent = :expected")
+    suspend fun claimStep(id: Long, expected: Int, step: Int): Int
+
     @Query("SELECT * FROM intake WHERE dueAt >= :since ORDER BY dueAt")
     suspend fun since(since: Long): List<IntakeEntity>
+
+    /**
+     * Приёмы, которые уже должны были быть, включая непогашенные.
+     * `since` возвращает и будущие строки: их нельзя считать в знаменателе
+     * выполнения, иначе «принято 5 из 190» вместо «5 из 12».
+     */
+    @Query("SELECT * FROM intake WHERE dueAt BETWEEN :since AND :until ORDER BY dueAt")
+    suspend fun between(since: Long, until: Long): List<IntakeEntity>
 
     @Query("UPDATE intake SET status = 'due' WHERE id = :id")
     suspend fun reopen(id: Long)

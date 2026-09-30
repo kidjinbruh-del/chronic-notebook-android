@@ -10,11 +10,14 @@ class Settings(context: Context) {
         context.getSharedPreferences("chronic", Context.MODE_PRIVATE)
 
     var lat: Double
-        get() = java.lang.Double.parseDouble(prefs.getString(KEY_LAT, "55.7167"))
+        // Раньше здесь стоял Double.parseDouble без перехвата: испорченное
+        // значение в настройках роняло и синхронизацию погоды, и карточку
+        // диагностики, потому что читалось оно на каждом экране.
+        get() = prefs.getString(KEY_LAT, "55.7167")?.toDoubleOrNull() ?: 55.7167
         set(v) = prefs.edit().putString(KEY_LAT, v.toString()).apply()
 
     var lon: Double
-        get() = java.lang.Double.parseDouble(prefs.getString(KEY_LON, "39.7083"))
+        get() = prefs.getString(KEY_LON, "39.7083")?.toDoubleOrNull() ?: 39.7083
         set(v) = prefs.edit().putString(KEY_LON, v.toString()).apply()
 
     var placeName: String
@@ -32,6 +35,18 @@ class Settings(context: Context) {
     var reminderLeadMin: Int
         get() = prefs.getInt(KEY_LEAD, 0)
         set(v) = prefs.edit().putInt(KEY_LEAD, v).apply()
+
+    /**
+     * Мелодия напоминания: [ru.chronicnotebook.reminders.ReminderSound.DEFAULT],
+     * [ru.chronicnotebook.reminders.ReminderSound.SILENT] или URI, выбранный
+     * пользователем. Отдельная строка, а не boolean: вариантов больше двух, и
+     * «выключить обратно» не должно затирать выбранный файл.
+     */
+    var alarmSound: String
+        get() = ru.chronicnotebook.reminders.ReminderSound.normalize(
+            prefs.getString(KEY_SOUND, ru.chronicnotebook.reminders.ReminderSound.DEFAULT)
+        )
+        set(v) = prefs.edit().putString(KEY_SOUND, ru.chronicnotebook.reminders.ReminderSound.normalize(v)).apply()
 
     var baselineSys: Int?
         get() = prefs.getInt(KEY_BASE_SYS, -1).takeIf { it > 0 }
@@ -52,6 +67,7 @@ class Settings(context: Context) {
         private const val KEY_TZ = "tz"
         private const val KEY_ESCALATE = "escalate"
         private const val KEY_LEAD = "lead"
+        private const val KEY_SOUND = "alarm_sound"
         private const val KEY_BASE_SYS = "base_sys"
         private const val KEY_BASE_DIA = "base_dia"
         private const val KEY_SYNC = "last_sync"

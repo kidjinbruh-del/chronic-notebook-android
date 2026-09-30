@@ -75,7 +75,11 @@ fun TimePickerField(
                     onClick = {
                         TimePickerDialog(
                             context,
-                            { _, hour, minute -> onChange(times.minus(minutes) + hour * 60 + minute) },
+                            { _, hour, minute ->
+                                // distinct(): иначе подбор времени, уже стоящего
+                                // в другом слоте, давал две одинаковые чипы.
+                                onChange((times.minus(minutes) + hour * 60 + minute).distinct().sorted())
+                            },
                             minutes / 60,
                             minutes % 60,
                             true,
@@ -96,7 +100,9 @@ fun TimePickerField(
             FilledTonalButton(onClick = {
                 TimePickerDialog(
                     context,
-                    { _, hour, minute -> onChange(times + hour * 60 + minute) },
+                    { _, hour, minute ->
+                        onChange((times + hour * 60 + minute).distinct().sorted())
+                    },
                     nowHour(),
                     nowMinute(),
                     true,

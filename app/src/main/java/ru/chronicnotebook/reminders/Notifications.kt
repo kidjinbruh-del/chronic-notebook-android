@@ -19,12 +19,22 @@ object Notifications {
     private val time = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
     private const val TAG = "ChronicNotebook"
 
+    /**
+     * Показывает напоминание о приёме.
+     *
+     * Ошибку логируем, но и пробрасываем дальше: вызывающий код отмечает ступень
+     * как отправленную до показа уведомления и при сбое обязан вернуть её, иначе
+     * приём навсегда остался бы без напоминания. Раньше ошибка проглатывалась
+     * здесь, и откат не срабатывал: в лог и в карточку «Диагностика» попадал
+     * только текст ошибки, а человек не получал ничего.
+     */
     fun showIntake(context: Context, intake: IntakeEntity, medName: String, dose: String, step: Int) {
-        // Раньше ошибка молча проглатывалась, и человек видел просто пустое
-        // уведомление без звука. Теперь любая ошибка видна в logcat и в
-        // карточке «Диагностика».
-        runCatching { show(context, intake, medName, dose, step) }
-            .onFailure { Log.e(TAG, "Не удалось показать уведомление о приёме", it) }
+        try {
+            show(context, intake, medName, dose, step)
+        } catch (e: Exception) {
+            Log.e(TAG, "Не удалось показать уведомление о приёме", e)
+            throw e
+        }
     }
 
     private fun show(context: Context, intake: IntakeEntity, medName: String, dose: String, step: Int) {
@@ -34,11 +44,16 @@ object Notifications {
         }
         val pending = PendingIntent.getBroadcast(
             context,
-            intake.id.toInt(),
+            AlarmScheduler.requestCode(intake.id),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val title = if (step == 0) "Пора принять: $medName" else "Напоминание $step: $medName"
+        val title = when (step) {
+            0 -> "Пора принять: $medName"
+            1 -> "Приём не отмечен: $medName"
+            2 -> "Повторное напоминание: $medName"
+            else -> "Последнее напоминание: $medName"
+        }
         val text = buildString {
             if (dose.isNotBlank()) append(dose)
             if (step > 0) {
@@ -47,21 +62,53 @@ object Notifications {
             }
             if (isEmpty()) append("Отметить приём")
         }
-        val notification: Notification = NotificationCompat.Builder(context, App.CHANNEL_INTAKE)
+        val notification: Notification = NotificationCompat.Builder(context, channelId(context))
             .setSmallIcon(R.drawable.ic_stat_pressure)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(false)
             .setOngoing(false)
             .setWhen(intake.dueAt)
             .setContentIntent(openApp(context))
             .addAction(0, "Принял", pending)
             .build()
-        context.getSystemService(NotificationManager::class.java).notify(intake.id.toInt(), notification)
+        context.getSystemService(NotificationManager::class.java)
+            ?.notify(AlarmScheduler.requestCode(intake.id), notification)
+    }
+
+    /**
+     * Канал, отвечающий за текущую мелодию.
+     *
+     * Раньше здесь был жёстко зашит [App.CHANNEL_INTAKE], и выбор мелодии
+     * ничего не менял. На Android 8+ мелодия задаётся только при создании
+     * канала, поэтому варианту звука соответствует свой канал.
+     */
+    private fun channelId(context: Context): String {
+        val app = context.applicationContext
+        val sound = if (app is App) {
+            runCatching { app.container.settings.alarmSound }.getOrDefault(ReminderSound.DEFAULT)
+        } else {
+            ReminderSound.DEFAULT
+        }
+        val id = ReminderSound.channelId(sound)
+        // На Android 8+ канал должен существовать до показа уведомления. Создаём
+        // на всякий случай: если по какой-то причине он удалён, уведомление
+        // иначе просто не появилось бы, и человек не получил бы напоминание.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            (app as? App)?.syncIntakeChannel()
+        }
+        return id
+    }
+
+    /** Снимает уведомление о приёме: после отметки «Принял» оно не должно висеть. */
+    fun dismiss(context: Context, intakeId: Long) {
+        runCatching {
+            context.getSystemService(NotificationManager::class.java)
+                ?.cancel(AlarmScheduler.requestCode(intakeId))
+        }
     }
 
     /**
@@ -72,13 +119,12 @@ object Notifications {
     fun showTest(context: Context) {
         runCatching {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
-            val notification = NotificationCompat.Builder(context, App.CHANNEL_INTAKE)
+            val notification = NotificationCompat.Builder(context, channelId(context))
                 .setSmallIcon(R.drawable.ic_stat_pressure)
                 .setContentTitle("Проверка напоминания")
                 .setContentText("Так будет звучать напоминание о приёме")
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
-                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setAutoCancel(true)
                 .setContentIntent(openApp(context))
                 .build()

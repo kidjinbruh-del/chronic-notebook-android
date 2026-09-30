@@ -17,6 +17,14 @@ enum class Context(val key: String, val label: String) {
 }
 
 object Protocol {
+    /**
+     * Тексты проблем хранятся в поле issues одной строкой, поэтому отчёт ищет их
+     * по подстроке. Чтобы поиск не разъехался с генератором, строки объявлены
+     * здесь же и используются в обоих местах.
+     */
+    const val NO_REST = "не отдыхал 5 минут перед замером"
+    const val TINY_DIFF = "разница систолического и диастолического подозрительно мала"
+
     fun issues(
         sys: Int,
         dia: Int,
@@ -26,10 +34,10 @@ object Protocol {
         cuffOk: Boolean,
     ): List<String> {
         val out = mutableListOf<String>()
-        if (!rested) out += "не отдыхал 5 минут перед замером"
-        if (spoke) out += "разговаривал во время измера"
+        if (!rested) out += NO_REST
+        if (spoke) out += "разговаривал во время измерения"
         if (!cuffOk) out += "манжета подобрана неверно"
-        if (sys - dia < 20) out += "разница систолического и диастолического подозрительно мала"
+        if (sys - dia < 20) out += TINY_DIFF
         if (context != Context.REST) out += "замер сделан в нерестовом состоянии"
         return out
     }

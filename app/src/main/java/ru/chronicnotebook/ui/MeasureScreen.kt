@@ -24,6 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import ru.chronicnotebook.domain.Context
 import ru.chronicnotebook.domain.Level
@@ -46,7 +48,10 @@ fun MeasureScreen(vm: MainViewModel) {
     val diaValue = dia.toIntOrNull()
     val valid = sysValue != null && diaValue != null &&
         sysValue in 60..260 && diaValue in 30..160
-
+    // Пульс необязателен, но если введён — должен быть правдоподобным: раньше
+    // 0 или 999 попадали в базу и в средние значения отчёта.
+    val pulseValue = pulse.toIntOrNull()
+    val pulseBad = pulse.isNotEmpty() && (pulseValue == null || pulseValue !in 30..220)
     Column(
         Modifier
             .fillMaxSize()
@@ -62,6 +67,7 @@ fun MeasureScreen(vm: MainViewModel) {
                 onValueChange = { sys = it.filter(Char::isDigit).take(3) },
                 label = { Text("Верхнее") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
             OutlinedTextField(
@@ -69,6 +75,7 @@ fun MeasureScreen(vm: MainViewModel) {
                 onValueChange = { dia = it.filter(Char::isDigit).take(3) },
                 label = { Text("Нижнее") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
         }
@@ -78,6 +85,13 @@ fun MeasureScreen(vm: MainViewModel) {
                 onValueChange = { pulse = it.filter(Char::isDigit).take(3) },
                 label = { Text("Пульс, уд/мин") },
                 singleLine = true,
+                isError = pulseBad,
+                supportingText = if (pulseBad) {
+                    { Text("Ожидается 30–220") }
+                } else {
+                    null
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.weight(1f),
             )
         }
@@ -160,7 +174,7 @@ fun MeasureScreen(vm: MainViewModel) {
                 sys = ""; dia = ""; pulse = ""; note = ""
                 ctx = Context.REST
             },
-            enabled = valid,
+            enabled = valid && !pulseBad,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Сохранить замер") }
 

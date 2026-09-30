@@ -5,9 +5,10 @@ import android.content.Context
 import android.content.Intent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import ru.chronicnotebook.App
-import ru.chronicnotebook.data.IntakeScheduler
+import ru.chronicnotebook.sync.Scheduler
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -16,14 +17,15 @@ class AlarmReceiver : BroadcastReceiver() {
             AlarmScheduler.ACTION_INTAKE -> {
                 val id = intent.getLongExtra(AlarmScheduler.EXTRA_ID, -1L)
                 if (id <= 0) return
+                // Работа идёт внутри goAsync: иначе система успевает убить процесс
+                // после возврата из onReceive, и напоминание теряется.
                 val pending = goAsync()
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    val intake = app.container.db.intakeDao().byId(id)
-                    val med = intake?.let { app.container.db.medDao().med(it.medId) }
-                    if (intake != null && med != null) {
-                        Escalator(app).handleIntake(intake.id)
+                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                    try {
+                        Escalator(app).handleIntake(id)
+                    } finally {
+                        pending.finish()
                     }
-                    pending.finish()
                 }
             }
             AlarmScheduler.ACTION_MEASURE -> {
@@ -33,15 +35,31 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 }
 
+/**
+ * После перезагрузки и после обновления приложения система снимает все
+ * будильники. Без этого обработчика напоминания не вернулись бы до
+ * следующего запуска приложения, а обновление поверх установленной версии
+ * оставляло бы пользователя без напоминаний о лекарствах.
+ */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
+            intent.action != Intent.ACTION_MY_PACKAGE_REPLACED
+        ) return
         val app = context.applicationContext as App
         val pending = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            IntakeScheduler(app).rescheduleAll()
-            Escalator(app).catchUp(app.container.settings.escalate)
-            pending.finish()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                Scheduler.scheduleMeasureHints(app)
+                Escalator(app).catchUp()
+            } finally {
+                pending.finish()
+            }
+        }
+        // Разворачивание расписания на 14 дней быстрее делать в своём scope:
+        // goAsync имеет ограничение примерно в 10 секунд.
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            ru.chronicnotebook.data.IntakeScheduler(app).rescheduleAll()
         }
     }
 }
@@ -53,10 +71,16 @@ class IntakeActionReceiver : BroadcastReceiver() {
         if (id <= 0) return
         val app = context.applicationContext as App
         val pending = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            app.container.db.intakeDao().markTaken(id, System.currentTimeMillis())
-            AlarmScheduler.cancel(app, id)
-            pending.finish()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                app.container.db.intakeDao().markTaken(id, System.currentTimeMillis())
+                AlarmScheduler.cancel(app, id)
+                // Без этого уведомление оставалось в шторке после отметки
+                // «Принял»: у него стоял autoCancel = false.
+                Notifications.dismiss(app, id)
+            } finally {
+                pending.finish()
+            }
         }
     }
 

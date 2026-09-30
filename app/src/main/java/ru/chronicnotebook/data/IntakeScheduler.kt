@@ -33,14 +33,19 @@ class IntakeScheduler(private val context: Context) {
         }
 
         val pending = db.intakeDao().since(System.currentTimeMillis())
-        val known = pending.associateBy { it.id }
         for (intake in pending) {
             if (intake.status != IntakeEntity.STATUS_DUE) continue
+            if (intake.medId !in meds) {
+                // Препарат выключен или удалён, а приём остался в базе:
+                // будильник по нему ставить нельзя.
+                db.intakeDao().markMissed(intake.id)
+                continue
+            }
             AlarmScheduler.scheduleExact(context, intake, intake.dueAt - System.currentTimeMillis())
         }
-        for (row in db.intakeDao().staleBefore(System.currentTimeMillis() - 3_600_000)) {
-            if (row.status == IntakeEntity.STATUS_DUE && row.id !in known) db.intakeDao().markMissed(row.id)
-        }
+        db.intakeDao().staleBefore(System.currentTimeMillis() - 3_600_000)
+            .filter { it.status == IntakeEntity.STATUS_DUE }
+            .forEach { db.intakeDao().markMissed(it.id) }
     }
 
     fun timesOf(schedule: ScheduleEntity): List<Int> =
@@ -60,6 +65,11 @@ class IntakeScheduler(private val context: Context) {
         for (intake in db.intakeDao().since(now)) {
             if (intake.status != IntakeEntity.STATUS_DUE) continue
             if (intake.dueAt > horizon) continue
+            // Просроченный приём, которому уже ушла хотя бы одна ступень,
+            // будильником не перевзводим: delay вышел бы отрицательным и
+            // сработал бы через секунду, создавая лишний круг обработки.
+            // Его следующую ступень ставит сам Escalator.
+            if (intake.dueAt <= now && intake.lastStepSent >= 0) continue
             AlarmScheduler.scheduleExact(context, intake, intake.dueAt - now)
         }
     }

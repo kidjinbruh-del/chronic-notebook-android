@@ -19,11 +19,18 @@ android {
 
     defaultConfig {
         applicationId = "ru.chronicnotebook"
-        // Android 6.0. Ниже 23 нельзя без переписывания вызовов getSystemService(Class).
+        // Android 6.0 — проверенный минимум, а не формальный.
+        //
+        // Опустить до 21 — не «одна строка»: getSystemService(Class) придётся
+        // заменять на getSystemService(String) с проверками версии, а
+        // PendingIntent.FLAG_IMMUTABLE (обязателен с 23) на 21/22 недоступен и
+        // требует отдельной ветки с FLAG_UPDATE_CURRENT. Проверить это на
+        // устройстве нечем, а молчаливая поломка на старых телефонах хуже, чем
+        // явный отказ от установки, поэтому порог остаётся на 23.
         minSdk = 23
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.6"
         vectorDrawables { useSupportLibrary = true }
     }
 
