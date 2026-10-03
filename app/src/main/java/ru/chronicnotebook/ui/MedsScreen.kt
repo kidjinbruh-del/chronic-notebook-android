@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.chronicnotebook.data.IntakeEntity
 import ru.chronicnotebook.data.MedEntity
 import ru.chronicnotebook.reminders.Notifications
+import ru.chronicnotebook.ui.theme.scaled
 
 private data class Editing(
     val med: MedEntity?,
@@ -47,8 +48,8 @@ fun MedsScreen(vm: MainViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp.scaled()),
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled()),
     ) {
         item {
             Card(
@@ -57,7 +58,7 @@ fun MedsScreen(vm: MainViewModel) {
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 ),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(16.dp.scaled()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Мои препараты", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Вносите только то, что уже назначил врач. Приложение не подбирает " +
@@ -124,7 +125,7 @@ private fun MedCard(
     }
 
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(16.dp.scaled()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

@@ -22,6 +22,7 @@ import ru.chronicnotebook.domain.Factor
 import ru.chronicnotebook.domain.Level
 import ru.chronicnotebook.domain.Stats
 import ru.chronicnotebook.domain.classify
+import ru.chronicnotebook.ui.theme.scaled
 
 @Composable
 fun StatsScreen(vm: MainViewModel) {
@@ -34,8 +35,8 @@ fun StatsScreen(vm: MainViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(16.dp.scaled()),
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled()),
     ) {
         item {
             Text("Связи и динамика", style = MaterialTheme.typography.headlineSmall)
@@ -99,7 +100,7 @@ fun StatsScreen(vm: MainViewModel) {
 @Composable
 private fun InfoCard(title: String, body: String) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(16.dp.scaled()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(body, style = MaterialTheme.typography.bodyMedium)
         }

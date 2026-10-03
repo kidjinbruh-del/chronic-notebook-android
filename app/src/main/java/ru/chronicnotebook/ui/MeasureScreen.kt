@@ -37,7 +37,9 @@ import ru.chronicnotebook.domain.Level
 import ru.chronicnotebook.domain.Protocol
 import ru.chronicnotebook.domain.advice
 import ru.chronicnotebook.domain.classify
+import ru.chronicnotebook.ui.theme.scaled
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MeasureScreen(vm: MainViewModel) {
     var sys by remember { mutableStateOf("") }
@@ -75,8 +77,8 @@ fun MeasureScreen(vm: MainViewModel) {
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(16.dp.scaled()),
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled()),
     ) {
         Text("Новый замер", style = MaterialTheme.typography.headlineSmall)
 
@@ -116,23 +118,15 @@ fun MeasureScreen(vm: MainViewModel) {
         }
 
         Text("Состояние при замере", style = MaterialTheme.typography.titleSmall)
-        Row(
+        // Раньше чипы раскладывались по два жёстких ряда: на узком экране
+        // «после кофе» и «после еды» сжимались в буквенную колонку.
+        // FlowRow переносит их сам по месту.
+        FlowRow(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Context.entries.take(3).forEach { c ->
-                FilterChip(
-                    selected = ctx == c,
-                    onClick = { ctx = c },
-                    label = { Text(c.label) },
-                )
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Context.entries.drop(3).forEach { c ->
+            Context.entries.forEach { c ->
                 FilterChip(
                     selected = ctx == c,
                     onClick = { ctx = c },
@@ -204,7 +198,7 @@ fun MeasureScreen(vm: MainViewModel) {
                     },
                 ),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.padding(16.dp.scaled()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("${sysValue}/$diaValue — ${level.label}", style = MaterialTheme.typography.titleMedium)
                     Text(advice(level, sysValue, diaValue), style = MaterialTheme.typography.bodyMedium)
                     if (issues.isNotEmpty()) {

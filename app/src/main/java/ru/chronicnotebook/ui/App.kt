@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.chronicnotebook.data.TagEntity
+import ru.chronicnotebook.ui.theme.scaled
 import ru.chronicnotebook.ui.theme.warmHeroBackground
 import ru.chronicnotebook.ui.theme.warmScreenBackground
 import java.time.Instant
@@ -109,7 +110,7 @@ fun App() {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                 ),
-                modifier = Modifier.background(ru.chronicnotebook.ui.theme.WarmChrome.topBar()),
+                modifier = Modifier.background(ru.chronicnotebook.ui.theme.Chrome.topBar()),
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -158,13 +159,14 @@ private fun HomeScreen(vm: MainViewModel) {
     // нижние карточки становились недоступны.
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(16.dp.scaled()),
+        verticalArrangement = Arrangement.spacedBy(12.dp.scaled()),
     ) {
         item { ReminderSetupCard() }
     item { SummaryCard(state.weatherText, state.baselineText, state.adherenceText) }
         item { ReportCard(vm, showReport) { showReport = it } }
         item { DiagnosticsCard() }
+        item { DesignCard() }
 
         item {
             Text(
@@ -217,7 +219,7 @@ private fun SummaryCard(weather: String, baseline: String, adherence: String) {
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(16.dp.scaled()), verticalArrangement = Arrangement.spacedBy(8.dp.scaled())) {
             Text("Сводка", style = MaterialTheme.typography.titleMedium)
             SummaryLine("Погода", weather)
             SummaryLine("Личная база", baseline)
@@ -254,7 +256,7 @@ private fun ReportCard(vm: MainViewModel, showReport: Boolean, onToggle: (Boolea
     }
 
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(16.dp.scaled()), verticalArrangement = Arrangement.spacedBy(8.dp.scaled())) {
             Text("Отчёт для врача", style = MaterialTheme.typography.titleMedium)
             FilledTonalButton(onClick = { onToggle(!showReport) }) {
                 Text(if (showReport) "Скрыть отчёт" else "Собрать отчёт")
@@ -299,7 +301,7 @@ fun MeasurementRow(
             },
         ),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp.scaled(), vertical = 12.dp.scaled())) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

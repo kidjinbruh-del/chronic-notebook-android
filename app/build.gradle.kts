@@ -29,8 +29,8 @@ android {
         // явный отказ от установки, поэтому порог остаётся на 23.
         minSdk = 23
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.7"
+        versionCode = 7
+        versionName = "0.8"
         vectorDrawables { useSupportLibrary = true }
 
         // Без этого AGP подставляет android.test.InstrumentationTestRunner:

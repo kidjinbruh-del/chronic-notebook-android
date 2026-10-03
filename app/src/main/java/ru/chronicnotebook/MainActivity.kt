@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import ru.chronicnotebook.ui.App
 import ru.chronicnotebook.ui.theme.ChronicTheme
+import ru.chronicnotebook.ui.theme.DesignStore
 
 class MainActivity : ComponentActivity() {
     private val requestNotifications =
@@ -26,7 +27,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        setContent { ChronicTheme { App() } }
+        setContent {
+            // Оформление читается до первого кадра: иначе на экране мелькнули бы
+            // цвета темы по умолчанию, а потом уже выбранные пользователем.
+            DesignStore.install(applicationContext)
+            ChronicTheme { App() }
+        }
         askNotifications()
     }
 
