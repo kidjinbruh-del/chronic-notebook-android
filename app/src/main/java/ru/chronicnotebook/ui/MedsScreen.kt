@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import java.time.LocalDate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.chronicnotebook.data.IntakeEntity
 import ru.chronicnotebook.data.MedEntity
+import ru.chronicnotebook.domain.Stock
+import ru.chronicnotebook.domain.StockState
 import ru.chronicnotebook.reminders.Notifications
 import ru.chronicnotebook.ui.theme.scaled
 
@@ -65,6 +68,7 @@ fun MedsScreen(vm: MainViewModel) {
                             "лечение и не меняет дозировки.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    ExpirySummary(meds)
                     FilledTonalButton(onClick = { editing = Editing(null, emptyList()) }) {
                         Icon(Icons.Filled.Add, null)
                         Text("  Добавить препарат")
@@ -88,12 +92,19 @@ fun MedsScreen(vm: MainViewModel) {
         MedEditorDialog(
             initial = target.med,
             initialTimes = target.times,
-            onSave = { name, dose, unit, withFood, prescribedBy, times ->
+            onSave = { d ->
                 val id = target.med?.id
                 if (id == null) {
-                    vm.addMed(name, "", dose, unit, withFood, times, prescribedBy)
+                    vm.addMed(
+                        name = d.name, inn = "", dose = d.dose, unit = d.unit,
+                        withFood = d.withFood, times = d.times, prescribedBy = d.prescribedBy,
+                        expiresOn = d.expiresOn, stock = d.stock, stockUnit = d.stockUnit,
+                    )
                 } else {
-                    vm.updateMed(id, name, dose, unit, withFood, prescribedBy, times)
+                    vm.updateMed(
+                        id, d.name, d.dose, d.unit, d.withFood, d.prescribedBy, d.times,
+                        d.expiresOn, d.stock, d.stockUnit,
+                    )
                 }
                 editing = null
             },
@@ -153,6 +164,7 @@ private fun MedCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            MedStockRow(med)
         }
     }
 }
@@ -184,6 +196,77 @@ private fun PendingIntakes(vm: MainViewModel, meds: Map<Long, MedEntity>) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Сводка по срокам годности: сколько просрочено и сколько скоро испортится.
+ *
+ * Считается по всем активным препаратам, а не по видимой части списка, —
+ * так же, как отчёт для врача. Смысл в том, чтобы человек узнал о
+ * просроченном препарате, открыв экрон, а не долистав до нужной карточки.
+ */
+@Composable
+private fun ExpirySummary(meds: List<MedEntity>) {
+    if (meds.isEmpty()) return
+    val today = LocalDate.now()
+    val expired = meds.count { Stock.state(it.expiresOn, today) == StockState.EXPIRED }
+    val soon = meds.count { Stock.state(it.expiresOn, today) == StockState.SOON }
+    if (expired == 0 && soon == 0) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (expired > 0) {
+            Text(
+                "Просрочено: $expired — применять нельзя, выбросить",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (soon > 0) {
+            Text(
+                "Истекает срок: $soon — скоро выбросить",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        }
+    }
+}
+
+/**
+ * Строка срока годности и остатка под расписанием приёма.
+ *
+ * Показывается только если человек это заполнял: у большинства препаратов
+ * срок не указан, и пустая строка «срок не указан» в каждой карточке только
+ * шумит. Исключение — просроченное: о нём сообщать нужно всегда, если дата
+ * вообще проставлена.
+ */
+@Composable
+private fun MedStockRow(med: MedEntity) {
+    val today = LocalDate.now()
+    val state = Stock.state(med.expiresOn, today)
+    val stock = Stock.stockLabel(med.stock, med.stockUnit)
+
+    if (state == StockState.NONE && stock == null) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (state != StockState.NONE) {
+            Text(
+                "Срок: ${Stock.human(med.expiresOn)} · ${Stock.expiryLabel(med.expiresOn, today)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = when (state) {
+                    StockState.EXPIRED -> MaterialTheme.colorScheme.error
+                    StockState.SOON -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+        if (stock != null) {
+            Text(
+                "Осталось: $stock",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

@@ -352,6 +352,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         withFood: Boolean,
         times: List<Int>,
         prescribedBy: String,
+        expiresOn: String? = null,
+        stock: Int = 0,
+        stockUnit: String = "шт",
     ) {
         viewModelScope.launch {
             val medId = db.medDao().insertMed(
@@ -362,6 +365,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     unit = unit,
                     withFood = withFood,
                     prescribedBy = prescribedBy,
+                    expiresOn = expiresOn,
+                    stock = stock,
+                    stockUnit = stockUnit,
                 )
             )
             if (times.isNotEmpty()) {
@@ -413,10 +419,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         withFood: Boolean,
         prescribedBy: String,
         times: List<Int>,
+        expiresOn: String? = null,
+        stock: Int = 0,
+        stockUnit: String = "шт",
     ) {
         viewModelScope.launch {
             cancelFutureIntakes(id)
-            db.medDao().updateMed(id, name, dose, unit, withFood, prescribedBy)
+            db.medDao().updateMed(
+                id, name, dose, unit, withFood, prescribedBy, expiresOn, stock, stockUnit,
+            )
             val clean = times.distinct().sorted()
             if (clean.isEmpty()) {
                 _message.value = "Время приёма не задано: напоминания приходить не будут"

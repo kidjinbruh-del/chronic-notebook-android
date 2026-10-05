@@ -63,7 +63,9 @@ interface MedDao {
     // иначе сохранение карточки затирало бы эти поля пустыми строками.
     @Query(
         "UPDATE med SET name = :name, dose = :dose, unit = :unit, " +
-            "withFood = :withFood, prescribedBy = :prescribedBy WHERE id = :id"
+            "withFood = :withFood, prescribedBy = :prescribedBy, " +
+            "expiresOn = :expiresOn, stock = :stock, stockUnit = :stockUnit " +
+            "WHERE id = :id"
     )
     suspend fun updateMed(
         id: Long,
@@ -72,6 +74,9 @@ interface MedDao {
         unit: String,
         withFood: Boolean,
         prescribedBy: String,
+        expiresOn: String?,
+        stock: Int,
+        stockUnit: String,
     )
 
     @Insert
@@ -261,7 +266,7 @@ interface TagDao {
         WeatherEntity::class,
         ReminderLogEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -314,6 +319,24 @@ abstract class AppDatabase : RoomDatabase() {
          * при любом обновлении схемы. Теперь при пропущенной миграции Room
          * падает громко, а не молча уничтожает данные.
          */
-        val MIGRATIONS: Array<androidx.room.migration.Migration> = arrayOf(MIGRATION_1_2)
+        /**
+         * 2 -> 3: срок годности и остаток у препарата.
+         *
+         * Только ADD COLUMN с DEFAULT: ни одна строка не меняется и ни одна
+         * таблица не пересоздаётся, поэтому все замеры, приёмы и напоминания
+         * переживают обновление. Значения по умолчанию совпадают с теми, что
+         * Room подставил бы при создании таблицы с нуля, иначе проверка схемы
+         * при первом запуске после обновления не пройдёт.
+         */
+        val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `med` ADD COLUMN `expiresOn` TEXT")
+                db.execSQL("ALTER TABLE `med` ADD COLUMN `stock` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `med` ADD COLUMN `stockUnit` TEXT NOT NULL DEFAULT 'шт'")
+            }
+        }
+
+        val MIGRATIONS: Array<androidx.room.migration.Migration> =
+            arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }

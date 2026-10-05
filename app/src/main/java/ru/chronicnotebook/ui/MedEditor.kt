@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,10 +25,13 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimeInput
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -40,6 +44,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.chronicnotebook.data.MedEntity
+import ru.chronicnotebook.domain.Stock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.Calendar
 
 /** Минуты от полуночи -> «ЧЧ:ММ». */
@@ -201,11 +209,35 @@ fun TimePickerField(
 private fun nowHour(): Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
 private fun nowMinute(): Int = Calendar.getInstance().get(Calendar.MINUTE)
 
+/**
+ * Черновик карточки препарата.
+ *
+ * Раньше `onSave` принимал шесть отдельных параметров, и каждое новое поле
+ * — срок годности, остаток — добавлялось восьмым и девятым позиционным.
+ * Их порядок нигде не подписан, а ошибка в вызове компилировалась. Черновик
+ * читается по именам полей и не требует переписывать все вызовы.
+ */
+data class MedDraft(
+    val name: String = "",
+    val dose: String = "",
+    val unit: String = "",
+    val withFood: Boolean = false,
+    val prescribedBy: String = "",
+    val times: List<Int> = emptyList(),
+    val expiresOn: String? = null,
+    val stock: Int = 0,
+    val stockUnit: String = "шт",
+)
+
+/** Единицы остатка. Чаще всего счёт идёт на штуки или упаковки. */
+private val STOCK_UNITS = listOf("шт", "уп", "мл", "г")
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MedEditor(
     initial: MedEntity?,
     initialTimes: List<Int>,
-    onSave: (name: String, dose: String, unit: String, withFood: Boolean, prescribedBy: String, times: List<Int>) -> Unit,
+    onSave: (MedDraft) -> Unit,
     onDelete: (() -> Unit)?,
     onCancel: () -> Unit,
 ) {
@@ -215,6 +247,10 @@ fun MedEditor(
     var withFood by remember { mutableStateOf(initial?.withFood ?: false) }
     var prescribedBy by remember { mutableStateOf(initial?.prescribedBy.orEmpty()) }
     var times by remember { mutableStateOf(initialTimes) }
+    var expiresOn by remember { mutableStateOf(initial?.expiresOn) }
+    var stock by remember { mutableStateOf(if ((initial?.stock ?: 0) > 0) initial!!.stock.toString() else "") }
+    var stockUnit by remember { mutableStateOf(initial?.stockUnit?.takeIf { it.isNotBlank() } ?: "шт") }
+    var pickingDate by remember { mutableStateOf(false) }
 
     Column(
         Modifier.verticalScroll(rememberScrollState()),
@@ -254,28 +290,136 @@ fun MedEditor(
             Checkbox(checked = withFood, onCheckedChange = { withFood = it })
             Text("С едой")
         }
+
+        // Срок годности упаковки и остаток — то же, что в «Хранилище
+        // препаратов». Здесь они нужны для одного: увидеть просроченное,
+        // не открывая второе приложение, потому что просроченное лекарство
+        // внешне ничем не отличается от обычного.
+        Text("Срок годности и остаток", style = MaterialTheme.typography.titleSmall)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(onClick = { pickingDate = true }) {
+                Text(if (expiresOn == null) "Выбрать дату" else Stock.human(expiresOn))
+            }
+            if (expiresOn != null) {
+                TextButton(onClick = { expiresOn = null }) { Text("Убрать") }
+            }
+        }
+        OutlinedTextField(
+            value = stock,
+            onValueChange = { stock = it.filter { ch -> ch.isDigit() }.take(4) },
+            label = { Text("Осталось") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            STOCK_UNITS.forEach { u ->
+                AssistChip(
+                    onClick = { stockUnit = u },
+                    label = { Text(u) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (stockUnit == u) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    ),
+                )
+            }
+        }
+
         TimePickerField(times = times, onChange = { times = it })
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
-                    onSave(name.trim(), dose.trim(), unit.trim(), withFood, prescribedBy.trim(), times)
+                    onSave(
+                        MedDraft(
+                            name = name.trim(),
+                            dose = dose.trim(),
+                            unit = unit.trim(),
+                            withFood = withFood,
+                            prescribedBy = prescribedBy.trim(),
+                            times = times,
+                            expiresOn = expiresOn,
+                            stock = stock.toIntOrNull() ?: 0,
+                            stockUnit = stockUnit,
+                        ),
+                    )
                 },
                 enabled = name.isNotBlank() && times.isNotEmpty(),
             ) { Text(if (initial == null) "Добавить" else "Сохранить") }
             TextButton(onClick = onCancel) { Text("Отмена") }
-            if (initial != null && onDelete != null) {
-                TextButton(onClick = onDelete) { Text("Удалить") }
-            }
+        }
+        // «Удалить» — на своей строке. В одном ряду с «Добавить» и «Отмена»
+        // он не помещался и переносился посередине слова: «Удал / ить».
+        if (initial != null && onDelete != null) {
+            TextButton(onClick = onDelete) { Text("Удалить препарат") }
         }
     }
+
+    if (pickingDate) {
+        ExpiryDateDialog(
+            initial = expiresOn,
+            onDismiss = { pickingDate = false },
+            onConfirm = {
+                expiresOn = it
+                pickingDate = false
+            },
+        )
+    }
+}
+
+/**
+ * Выбор даты срока годности.
+ *
+ * Дата выбирается пикером, а не вводится текстом: в списке препаратов даты
+ * сравниваются между собой, и «через месяц» или «12.26» рядом с «24.09.2026»
+ * сравнить невозможно. Заодно исчезает целый класс ошибок ввода.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExpiryDateDialog(
+    initial: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val start = Stock.parse(initial) ?: LocalDate.now()
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Срок годности") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                DatePicker(state = state)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val millis = state.selectedDateMillis
+                if (millis != null) {
+                    onConfirm(
+                        Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                            .let { Stock.toIso(it) },
+                    )
+                } else {
+                    onDismiss()
+                }
+            }) { Text("Готово") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 @Composable
 fun MedEditorDialog(
     initial: MedEntity?,
     initialTimes: List<Int>,
-    onSave: (name: String, dose: String, unit: String, withFood: Boolean, prescribedBy: String, times: List<Int>) -> Unit,
+    onSave: (MedDraft) -> Unit,
     onDelete: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
