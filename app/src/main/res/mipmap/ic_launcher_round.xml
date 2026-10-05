@@ -1,22 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp"
-    android:height="48dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#0B6E4F"
-        android:pathData="M54,6a48,48 0 1,0 0.1,0z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M32,60 L32,46 L37,46 L37,60 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,70 L42,36 L47,36 L47,70 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M52,64 L52,42 L57,42 L57,64 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M62,74 L62,32 L67,32 L67,74 Z" />
-</vector>
+<!-- Круглая иконка для Android 6–7. В лаунчерах с круглыми значками система
+     брала roundIcon, и без этого файла она брала обычную иконку и подставляла
+     свой круглый значок. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background" />
+    <item android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>

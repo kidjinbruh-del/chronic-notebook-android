@@ -1,25 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Иконка «Дневник давления» — упрощённая.
+
+     Прежняя была столбиками разной высоты (как столбиковая диаграмма) поверх
+     линейки, плюс собственный зелёный фон во весь холст — четыре белых
+     прямоугольника и линия. В мелком размере это читалось как «полоски»,
+     а не как давление.
+
+     Сейчас одна линия пульса. Это и есть смысл приложения — следить за
+     давлением, — и одна фигура читается при любом размере.
+
+     Плоско, без градиентов: в монохромной маске Android 13+ система берёт
+     только альфу. Фона внутри вектора нет: зелёный задник задаётся в
+     adaptive icon, свой зелёный прямоугольник во весь холст перекрывал бы
+     его в монхромном режиме.
+
+     Холст 108×108. Безопасная зона — круг радиусом 36 от центра (54,54);
+     линия занимает 28 единиц по горизонтали и 16 по вертикали, плюс
+     половина толщины обводки — всё внутри. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
     <path
-        android:fillColor="#0B6E4F"
-        android:pathData="M0,0h108v108h-108z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M28,60 L28,44 L34,44 L34,60 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,72 L40,32 L46,32 L46,72 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M52,66 L52,38 L58,38 L58,66 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M64,78 L64,26 L70,26 L70,78 Z" />
-    <path
-        android:fillColor="#7FE3B0"
-        android:pathData="M24,78 L84,78 L84,82 L24,82 Z" />
+        android:pathData="M26,54 L40,54 L46,38 L54,70 L62,46 L68,54 L82,54"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>
