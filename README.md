@@ -232,7 +232,10 @@ APK: `app/build/outputs/apk/release/app-release.apk`
 
 ## Лицензия
 
-MIT. См. [LICENSE](LICENSE).
+Авторские материалы текущей версии: все права защищены. См. [LICENSE](LICENSE).
+Условия предыдущих публикаций и сторонних компонентов сохраняются. Эффект
+преломления использует адаптированный шейдер [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)
+по [Apache 2.0](app/src/main/assets/licenses/AndroidLiquidGlass.txt).
 ## Снимки с телефона
 
 Все снимки сделаны на TECNO BF7 (Android 12) на подписанном APK, не на эмуляторе.

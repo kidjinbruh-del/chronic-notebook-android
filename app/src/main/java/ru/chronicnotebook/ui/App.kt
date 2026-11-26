@@ -1,6 +1,6 @@
 package ru.chronicnotebook.ui
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -28,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -43,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +58,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.chronicnotebook.data.TagEntity
 import ru.chronicnotebook.ui.theme.scaled
-import ru.chronicnotebook.ui.theme.warmHeroBackground
+import ru.chronicnotebook.data.MeasurementEntity
 import ru.chronicnotebook.ui.theme.warmScreenBackground
 import java.time.Instant
 import java.time.ZoneId
@@ -64,7 +67,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private enum class Tab(val title: String, val icon: ImageVector) {
-    HOME("Дом", Icons.Filled.Favorite),
+    HOME("Дневник", Icons.Filled.Favorite),
     ADD("Замер", Icons.Filled.Add),
     MEDS("Лекарства", Icons.Filled.Medication),
     STATS("Связи", Icons.Filled.Insights),
@@ -74,7 +77,7 @@ private enum class Tab(val title: String, val icon: ImageVector) {
 @Composable
 fun App() {
     val vm: MainViewModel = viewModel()
-    var tab by remember { mutableStateOf(Tab.HOME) }
+    var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     val snackbar = remember { SnackbarHostState() }
     val message by vm.message.collectAsStateWithLifecycle()
 
@@ -104,33 +107,37 @@ fun App() {
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().warmScreenBackground(),
         topBar = {
             TopAppBar(
                 title = { Text("Дневник давления") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                 ),
-                modifier = Modifier.background(ru.chronicnotebook.ui.theme.Chrome.topBar()),
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 Tab.entries.forEach { entry ->
                     NavigationBarItem(
                         selected = tab == entry,
                         onClick = { tab = entry },
-                        icon = { Icon(entry.icon, entry.title) },
+                        icon = { Icon(entry.icon, contentDescription = null) },
                         label = { Text(entry.title) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        ),
                     )
                 }
             }
         },
         containerColor = Color.Transparent,
     ) { padding ->
-        Box(Modifier.fillMaxSize().warmScreenBackground().padding(padding)) {
+        Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                Tab.HOME -> HomeScreen(vm)
+                Tab.HOME -> HomeScreen(vm, onAdd = { tab = Tab.ADD })
                 Tab.ADD -> MeasureScreen(vm)
                 Tab.MEDS -> MedsScreen(vm)
                 Tab.STATS -> StatsScreen(vm)
@@ -143,12 +150,13 @@ private val fmt: DateTimeFormatter =
     DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault())
 
 @Composable
-private fun HomeScreen(vm: MainViewModel) {
+private fun HomeScreen(vm: MainViewModel, onAdd: () -> Unit) {
     val items by vm.measurements.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
     val allTags by vm.tags.collectAsStateWithLifecycle()
     val tagLinks by vm.tagLinks.collectAsStateWithLifecycle()
     var showReport by remember { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var tagging by remember { mutableStateOf<Long?>(null) }
     val tagIdsByMeasurement = remember(tagLinks) {
         tagLinks.groupBy({ it.measurementId }, { it.tagId }).mapValues { it.value.toSet() }
@@ -162,22 +170,30 @@ private fun HomeScreen(vm: MainViewModel) {
         contentPadding = PaddingValues(16.dp.scaled()),
         verticalArrangement = Arrangement.spacedBy(12.dp.scaled()),
     ) {
-        item { ReminderSetupCard() }
-    item { SummaryCard(state.weatherText, state.baselineText, state.adherenceText) }
-        item { ReportCard(vm, showReport) { showReport = it } }
-        item { DiagnosticsCard() }
-        item { DesignCard() }
+        item { LatestMeasurementCard(items.firstOrNull(), onAdd) }
+        item { SummaryCard(state.weatherText, state.baselineText, state.adherenceText) }
+        item {
+            TextButton(onClick = { showSettings = !showSettings }) {
+                Text(if (showSettings) "Скрыть настройки и отчёт" else "Настройки и отчёт")
+            }
+        }
+        if (showSettings) {
+            item { ReminderSetupCard() }
+            item { ReportCard(vm, showReport) { showReport = it } }
+            item { DiagnosticsCard() }
+            item { DesignCard() }
+        }
 
         item {
             Text(
-                "Последние замеры",
+                "История замеров",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
         if (items.isEmpty()) {
             item {
-                EmptyHint("Замеров пока нет. Нажмите «Замер» на нижней панели.")
+                EmptyHint("Здесь появятся сохранённые замеры.")
             }
         } else {
             items(items.take(30), key = { it.id }) { m ->
@@ -209,14 +225,47 @@ private fun HomeScreen(vm: MainViewModel) {
 }
 
 @Composable
+private fun LatestMeasurementCard(measurement: MeasurementEntity?, onAdd: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    JournalGlassCard(
+        Modifier.fillMaxWidth().border(1.dp, colors.outlineVariant, JournalCardShape),
+    ) {
+        Column(
+            Modifier.padding(20.dp.scaled()),
+            verticalArrangement = Arrangement.spacedBy(10.dp.scaled()),
+        ) {
+            Text("Последний замер", style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+            if (measurement == null) {
+                Text("Записей пока нет", style = MaterialTheme.typography.headlineSmall, color = colors.onSurface)
+            } else {
+                Text("${measurement.sys} / ${measurement.dia}", style = MaterialTheme.typography.displaySmall,
+                    color = colors.onSurface)
+                val pulse = measurement.pulse?.let { "  ·  Пульс $it уд/мин" }.orEmpty()
+                Text("мм рт. ст.$pulse",
+                    style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
+                Text(fmt.format(Instant.ofEpochMilli(measurement.takenAt)),
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                if (!measurement.valid) {
+                    Text("Замер отмечен в истории", style = MaterialTheme.typography.bodyMedium,
+                        color = colors.error)
+                }
+            }
+            Button(onClick = onAdd) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Text("Добавить замер", modifier = Modifier.padding(start = 6.dp))
+            }
+        }
+    }
+}
+
+@Composable
 private fun SummaryCard(weather: String, baseline: String, adherence: String) {
     Card(
-        Modifier
-            .fillMaxWidth()
-            .warmHeroBackground(androidx.compose.material3.CardDefaults.shape),
+        Modifier.fillMaxWidth(),
+        shape = JournalCardShape,
         colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ),
     ) {
         Column(Modifier.padding(16.dp.scaled()), verticalArrangement = Arrangement.spacedBy(8.dp.scaled())) {

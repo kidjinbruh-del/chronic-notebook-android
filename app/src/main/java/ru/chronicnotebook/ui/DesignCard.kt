@@ -103,7 +103,7 @@ fun DesignCard() {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Градиенты",
+                    "Градиенты и стекло",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                 )
