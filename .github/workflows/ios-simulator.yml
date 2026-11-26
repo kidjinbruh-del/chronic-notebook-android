@@ -1,8 +1,8 @@
 name: iOS Simulator build
 
 on:
-  push:
-    branches: [codex/journal-redesign-ios]
+  pull_request:
+    branches: [main]
     paths:
       - 'ios/**'
       - '.github/workflows/ios-simulator.yml'
