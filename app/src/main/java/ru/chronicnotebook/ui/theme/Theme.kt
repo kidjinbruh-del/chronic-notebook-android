@@ -15,7 +15,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
@@ -215,58 +214,19 @@ private fun schemeOf(palette: Palette, dark: Boolean) = when (palette) {
  * главной карточки. Остальное остаётся плоским, чтобы текст не терялся.
  * Выключаются одним тумблером — кому-то ровный фон приятнее.
  */
-object Chrome {
-    private var gradients = true
-    private var top = Color(0xFF2A1F10)
-    private var bottom = Color(0xFF0E0B07)
-    private var heroA = Color(0xFF6B3E12)
-    private var heroB = Color(0xFF241708)
-
-    @Composable
-    fun configure(design: Design) {
-        val colors = MaterialTheme.colorScheme
-        gradients = design.gradients
-        top = colors.surfaceBright
-        bottom = colors.surfaceContainerLowest
-        heroA = colors.primaryContainer
-        heroB = colors.surfaceContainerHighest
-    }
-
-    @Composable
-    fun screen(): Brush {
-        val bg = MaterialTheme.colorScheme.background
-        return if (gradients) {
-            Brush.verticalGradient(0.0f to top, 0.35f to bg, 1.0f to bottom)
-        } else {
-            SolidColor(bg)
-        }
-    }
-
-    @Composable
-    fun topBar(): Brush {
-        val surface = MaterialTheme.colorScheme.surface
-        return if (gradients) {
-            Brush.verticalGradient(0.0f to top, 1.0f to surface)
-        } else {
-            SolidColor(surface)
-        }
-    }
-
-    @Composable
-    fun heroCard(): Brush = if (gradients) {
-        Brush.linearGradient(0.0f to heroA, 0.55f to heroB, 1.0f to heroB)
-    } else {
-        SolidColor(heroA)
-    }
-}
+internal val LocalVisualEffects = staticCompositionLocalOf { true }
 
 /** Фоновая заливка экрана: градиент выбранной палитры или ровный цвет. */
 @Composable
-fun Modifier.warmScreenBackground(): Modifier = background(Chrome.screen())
-
-/** Главная карточка: акцентная заливка. */
-@Composable
-fun Modifier.warmHeroBackground(shape: Shape): Modifier = background(Chrome.heroCard(), shape)
+fun Modifier.warmScreenBackground(): Modifier {
+    val colors = MaterialTheme.colorScheme
+    val brush = if (LocalVisualEffects.current) {
+        Brush.verticalGradient(0f to colors.surfaceBright, .35f to colors.background, 1f to colors.surfaceContainerLowest)
+    } else {
+        SolidColor(colors.background)
+    }
+    return background(brush)
+}
 
 /** Множитель плотности: им пользуются отступы экранов. */
 val LocalSpacing = staticCompositionLocalOf { 1.0f }
@@ -288,6 +248,7 @@ private fun typography(font: FontStyle, scale: Float): Typography {
         fontWeight = weight,
     )
     return Typography(
+        displaySmall = st(42, FontWeight.SemiBold, 48),
         headlineSmall = st(24, FontWeight.SemiBold, 30),
         titleLarge = st(21, FontWeight.SemiBold, 27),
         titleMedium = st(16, FontWeight.SemiBold, 22),
@@ -329,9 +290,9 @@ fun ChronicTheme(
     CompositionLocalProvider(
         LocalContentColor provides colors.onBackground,
         LocalSpacing provides design.density.scale,
+        LocalVisualEffects provides design.gradients,
     ) {
         MaterialTheme(colorScheme = colors, typography = typo) {
-            Chrome.configure(design)
             // Material3 не красит «голые» Text в цвет фона: по умолчанию они
             // чёрные, и на тёмной теме заголовки экранов были не видны.
             CompositionLocalProvider(LocalContentColor provides colors.onBackground) {

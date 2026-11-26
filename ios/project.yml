@@ -1,0 +1,28 @@
+name: ChronicNotebook
+options:
+  deploymentTarget:
+    iOS: '16.0'
+packages:
+  Pow:
+    url: https://github.com/EmergeTools/Pow
+    exactVersion: 1.0.6
+targets:
+  ChronicNotebook:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        buildPhase: resources
+    dependencies:
+      - package: Pow
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.chronicnotebook.ios
+        IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Дневник давления
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: '1'
+        MARKETING_VERSION: '0.1.0'
+        CURRENT_PROJECT_VERSION: '1'
